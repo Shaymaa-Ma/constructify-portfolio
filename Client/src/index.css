@@ -1,0 +1,27 @@
+:root {
+  --navy: #181e26;
+  --navy-soft: #47536b;
+  --text-gray: #6b7280;
+  --accent: #e6652a;
+  --accent-light: #f9eeea;
+  --cream: #f6f4f0;
+  --white: #ffffff;
+  --border: #ececec;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  font-family: "Poppins", sans-serif;
+  color: var(--navy);
+  background-color: var(--white);
+}
+
+img { max-width: 100%; display: block; }
+
+a { text-decoration: none; color: inherit; }
+
+button { font-family: inherit; cursor: pointer; }

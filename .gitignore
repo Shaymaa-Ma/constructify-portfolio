@@ -1,23 +1,65 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# =========================
+# React / Node
+# =========================
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.js
+node_modules/
+build/
+dist/
 
-# testing
-/coverage
-
-# production
-/build
-
-# misc
-.DS_Store
+# Environment variables
+.env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 
+
+# =========================
+# Logs
+# =========================
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+
+
+# =========================
+# IDE / Editor
+# =========================
+
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+
+# =========================
+# PHP
+# =========================
+
+# PHP Composer dependencies (if used)
+vendor/
+
+# Local PHP configuration files
+*.local.php
+
+
+# =========================
+# WAMP / XAMPP
+# =========================
+
+# Temporary files
+*.tmp
+*.temp
+
+
+# =========================
+# Backups
+# =========================
+
+*.bak
+*.backup
+*.old

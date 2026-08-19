@@ -1,53 +1,49 @@
-// Import React hooks: useEffect to run code after rendering,
-// and useState to store the About section data.
-import React, { useEffect, useState } from "react";
 
+import React, { useEffect, useState } from "react";
 // Import the API function used to get About section data from the backend.
 import { getAbout } from "../api/api";
 
-// Define and export the About component.
+// Define and export the About component
 export default function About() {
 
-  // Create a state variable called "about" to store the data received from the API.
-  // Initially, the value is null because the data has not been loaded yet.
+  // Create a state variable called "about" to store the data received from the API
+  // Initially, the value is null because the data has not been loaded yet
   const [about, setAbout] = useState(null);
 
-  // useEffect runs after the component is rendered.
+  // useEffect runs after the component is rendered
   useEffect(() => {
 
-    // Call the getAbout API function to fetch the About section data.
+    // Call the getAbout API function to fetch the About section data
     getAbout()
 
-      // When the request succeeds, save the returned data in the "about" state.
+      // When the request succeeds, save the returned data in the "about" state
       .then(setAbout)
 
-      // If an error occurs, do nothing instead of showing an error.
+      // If an error occurs, do nothing instead of showing an error
       .catch(() => {});
 
-  // The empty dependency array means this effect runs only once
-  // when the component is first loaded.
+  // The empty dependency array means this effect runs only once, when the component is first loaded
   }, []);
 
   // If the About data has not been loaded yet,
-  // display an empty About section as a temporary placeholder.
+  // display an empty About section as a temporary placeholder
   if (!about) return <section id="about" className="about" />;
 
-  // Return the complete About section.
+  // Return the complete About section
   return (
 
-    // Main About section.
-    // The id allows navigation to this section using #about.
+    // Main About section
+    // The id allows navigation to this section using #about
     <section id="about" className="about">
 
-      {/* Container that controls the maximum width and spacing of the section. */}
+      {/* Container that controls the maximum width and spacing of the section */}
       <div className="container about-grid">
 
-        {/* Left side of the About section containing the images. */}
+        {/* Left side of the About section containing the images */}
         <div className="about-media">
 
           {/* 
-            Main About image.
-            The image filename comes from the database.
+            The image filename comes from the database
           */}
           <img
             src={`/images/${about.image_primary}`}
@@ -56,17 +52,16 @@ export default function About() {
           />
 
           {/* 
-            Small badge displayed over the images.
-            The text comes from the database.
+            Small badge displayed over the images
+            The text comes from the database
           */}
           <span className="about-badge">
             {about.overlay_badge_text}
           </span>
 
           {/* 
-            Secondary About image.
-            The image filename also comes from the database.
-            alt is empty because this image is decorative.
+            The image filename also comes from the database
+            alt is empty because this image is decorative
           */}
           <img
             src={`/images/${about.image_secondary}`}

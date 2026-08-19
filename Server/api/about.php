@@ -1,6 +1,5 @@
 <?php
 
-// Allow requests from the React frontend
 require "../includes/cors.php";
 require "../includes/db.php";
 
@@ -19,5 +18,5 @@ $features = $conn->query(
 // add the features to the About section data
 $about["features"] = $features;
 
-// convert the About data to JSON for React
+// convert the about section data to JSON and send it to React
 echo json_encode($about);

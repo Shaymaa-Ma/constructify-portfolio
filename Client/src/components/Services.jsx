@@ -1,15 +1,14 @@
-// Import React hooks for fetching and storing data.
+// Import React hooks for fetching and storing data
 import React, { useEffect, useState } from "react";
-
 // Import the API function that gets services data.
 import { getServices } from "../api/api";
 
 export default function Services() {
 
-  // Store the services data received from the API.
+  // Store the services data received from the API
   const [data, setData] = useState(null);
 
-  // Fetch the services when the component loads.
+  // Fetch the services when the component loads
   useEffect(() => {
     getServices().then(setData).catch(() => {});
   }, []);
@@ -18,20 +17,20 @@ export default function Services() {
   if (!data) return <section id="services" className="services" />;
 
   return (
-    // Main Services section.
+    // Main Services section
     <section id="services" className="services">
       <div className="container">
 
-        {/* Section title and description. */}
+        {/* Section title and description */}
         <div className="section-heading text-center">
           <h2 className="section-title">{data.title}</h2>
           <p className="section-desc">{data.subtitle}</p>
         </div>
 
-        {/* Main services layout. */}
+        {/* Main services layout */}
         <div className="services-layout">
 
-          {/* Featured service panel with image and button. */}
+          {/* Featured service panel with image and button */}
           <div className="services-panel">
             <img
               src={`/images/${data.panel_image}`}
@@ -41,7 +40,7 @@ export default function Services() {
             <div className="services-panel-overlay">
               <h3>{data.panel_title}</h3>
 
-              {/* Link to the featured service. */}
+              {/* Link to the featured service */}
               <a
                 href={data.panel_btn_link}
                 className="link-accent"
@@ -52,10 +51,10 @@ export default function Services() {
             </div>
           </div>
 
-          {/* Grid containing all services. */}
+          {/* Grid containing all services */}
           <div className="services-grid">
 
-            {/* Create a card for each service. */}
+            {/* Create a card for each service */}
             {data.services.map((s, i) => (
               <div className="service-card" key={i}>
 
@@ -64,7 +63,7 @@ export default function Services() {
                   <i className={`bi ${s.icon}`}></i>
                 </div>
 
-                {/* Service title and description. */}
+                {/* Service title and description */}
                 <h4>{s.title}</h4>
                 <p>{s.description}</p>
 

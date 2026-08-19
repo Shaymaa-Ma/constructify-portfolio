@@ -1,6 +1,6 @@
-// Base URL of the PHP API
-// It uses the environment variable if available,
-// otherwise it uses the local WAMP server URL.
+// base URL of the PHP API
+// it uses the environment variable if available,
+// but now it uses the local WAMP server URL
 const API_URL =
   process.env.REACT_APP_API_URL ||
   "http://localhost/construction-portfolio/Server/api";

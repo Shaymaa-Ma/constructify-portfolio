@@ -20,5 +20,5 @@ $counters = $conn->query(
 // add the counters to the hero data
 $hero["counters"] = $counters;
 
-// convert the hero data to JSON, so React can receive it through the API.
+// convert the hero data to JSON, so React can receive it through the API
 echo json_encode($hero);

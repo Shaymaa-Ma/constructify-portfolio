@@ -16,7 +16,12 @@ $services = $conn->query(
 )->fetch_all(MYSQLI_ASSOC);
 
 // get the statistics for the Services section, Only counters with section_key = 'services' are selected
-$stats = $
+$stats = $conn->query(
+    "SELECT icon, value, label
+     FROM counters
+     WHERE section_key = 'services'
+     ORDER BY display_order ASC"
+)->fetch_all(MYSQLI_ASSOC);
 
 // add the services to the section data
 $section["services"] = $services;

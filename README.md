@@ -54,7 +54,7 @@ project/
     ├── .env.example          # copy to .env, set REACT_APP_API_URL
     └── src/
         ├── api/api.js
-        ├── components/
+        ├── components/       #all components used in Home.jsx file
         ├── pages/Home.jsx
         ├── App.jsx
         └── index.js

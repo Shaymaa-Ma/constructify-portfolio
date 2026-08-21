@@ -125,11 +125,13 @@
   transition: width 0.3s ease;
 }
 
-.nav-links a:hover {
+.nav-links a:hover,
+.nav-links a.nav-link-active {
   color: var(--accent);
 }
 
-.nav-links a:hover::after {
+.nav-links a:hover::after,
+.nav-links a.nav-link-active::after {
   width: 100%;
 }
 
@@ -164,6 +166,7 @@
   font-size: 1.8rem;
   line-height: 1;
 }
+.btn-pill { border-radius: 50px; }
 
 
 /* ===== Tablet / Mobile ===== */

@@ -49,34 +49,6 @@ it's easy to trace where any piece of content actually comes from:
 |---|---|
 | ![Projects](screenshots/projects.png) | ![Projects](screenshots/projects2.png) |
 
-## Project structure
-
-```
-project/
-├── database/
-│   └── schema.sql          # import this first
-├── backend/                 # native PHP + mysqli
-│   ├── includes/
-│   │   ├── db.php           # DB credentials — edit before running
-│   │   └── cors.php
-│   └── api/
-│       ├── site-settings.php
-│       ├── hero.php
-│       ├── about.php
-│       ├── services.php
-│       └── projects.php
-└── frontend/                 # React (CRA)
-    ├── public/
-    │   ├── index.html
-    │   └── images/           # your real image files go here
-    ├── .env.example          # copy to .env, set REACT_APP_API_URL
-    └── src/
-        ├── api/api.js
-        ├── components/       # all components used in Home.jsx
-        ├── pages/Home.jsx
-        ├── App.jsx
-        └── index.js
-```
 
 ## Getting it running
 
@@ -127,5 +99,4 @@ npm start
   — they're there visually, they just don't go anywhere yet.
 - The image filenames stored in the database have to match whatever
   you actually put in `frontend/public/images/`, or they just won't
-  load. Check that folder's `README.txt` for the exact list of
-  expected names.
+  load. 

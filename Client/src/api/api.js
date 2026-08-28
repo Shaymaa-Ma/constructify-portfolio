@@ -3,7 +3,7 @@
 // but now it uses the local WAMP server URL
 const API_URL =
   process.env.REACT_APP_API_URL ||
-  "http://localhost/construction-portfolio/Server/api";
+  "http://localhost/construction-portfolio/Server/api/client";
 
 //reusable function for sending GET requests to the API
 async function get(endpoint) {
@@ -20,7 +20,7 @@ async function get(endpoint) {
   return res.json();
 }
 
-// Get all data
+// get all data
 export const getSiteSettings = () => get("site-settings.php");
 export const getHero = () => get("hero.php");
 export const getAbout = () => get("about.php");

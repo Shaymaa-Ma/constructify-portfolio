@@ -1,7 +1,14 @@
+
 // Import React hooks for fetching and storing data
 import React, { useEffect, useState } from "react";
+
 // Import the API function that gets services data.
 import { getServices } from "../api/api";
+
+// Base URL for uploaded images managed by the Admin.
+// Example:
+// http://localhost/construction-portfolio/uploads
+const UPLOADS_URL = process.env.REACT_APP_UPLOADS_URL;
 
 export default function Services() {
 
@@ -33,7 +40,7 @@ export default function Services() {
           {/* Featured service panel with image and button */}
           <div className="services-panel">
             <img
-              src={`/images/${data.panel_image}`}
+              src={`${UPLOADS_URL}/${data.panel_image}`}
               alt={data.panel_title}
             />
 

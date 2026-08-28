@@ -1,7 +1,6 @@
 <?php
 
-require "../includes/cors.php";
-require "../includes/db.php";
+require_once __DIR__ . '/_bootstrap.php';
 
 // get the main Projects section data
 $section = $conn->query(

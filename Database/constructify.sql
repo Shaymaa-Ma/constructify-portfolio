@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1:3306
--- Generation Time: Aug 18, 2026 at 05:32 AM
+-- Generation Time: Aug 25, 2026 at 08:09 AM
 -- Server version: 8.4.7
 -- PHP Version: 8.3.28
 
@@ -75,6 +75,24 @@ CREATE TABLE IF NOT EXISTS `about_section` (
 
 INSERT INTO `about_section` (`id`, `badge_text`, `title`, `description`, `overlay_badge_text`, `image_primary`, `image_secondary`, `primary_btn_text`, `primary_btn_link`, `secondary_btn_text`, `secondary_btn_link`) VALUES
 (1, 'About Constructify', 'We Build With Precision, Passion & Purpose', 'Since 1998, we have been delivering world class construction services across residential, commercial, and infrastructure sectors. Our commitment to quality craftsmanship and client satisfaction drives everything we do.', '25+ Years of Experience', 'about-primary.jpg', 'about-secondary.jpg', 'Start Your Project', '#', 'View Our Work', '#projects');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `admins`
+--
+
+DROP TABLE IF EXISTS `admins`;
+CREATE TABLE IF NOT EXISTS `admins` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) NOT NULL,
+  `email` varchar(150) NOT NULL,
+  `password` varchar(255) NOT NULL,
+  `role` varchar(50) DEFAULT 'admin',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_admin_email` (`email`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
 

@@ -1,6 +1,15 @@
+
 // Import React and the useEffect hook.
 // useEffect is used here to listen for keyboard events.
 import React, { useEffect } from "react";
+
+/*
+  Base URL for uploaded images managed by the Admin.
+
+  The value comes from the Client .env file:
+  REACT_APP_UPLOADS_URL=http://localhost/construction-portfolio/uploads
+*/
+const UPLOADS_URL = process.env.REACT_APP_UPLOADS_URL;
 
 /*
   ProjectLightbox displays a selected project in a full-screen overlay.
@@ -105,7 +114,7 @@ export default function ProjectLightbox({
 
       </button>
 
-      {/* 
+      {/*
         Main lightbox content.
         stopPropagation prevents clicking the image/content
         from closing the lightbox.
@@ -115,12 +124,15 @@ export default function ProjectLightbox({
         onClick={(e) => e.stopPropagation()}
       >
 
-        {/* 
+        {/*
           Display the selected project image.
-          The image filename comes from the database.
+
+          The filename comes from the database.
+          The actual image is loaded directly from:
+          uploads/
         */}
         <img
-          src={`/images/${project.image}`}
+          src={`${UPLOADS_URL}/${project.image}`}
           alt={project.title}
         />
 

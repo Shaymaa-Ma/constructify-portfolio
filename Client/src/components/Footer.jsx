@@ -122,20 +122,17 @@ export default function Footer({ settings }) {
           {/* Social media links. */}
           <div className="footer-socials">
 
-            {/* Facebook link. */}
-            <a href="#" aria-label="Facebook">
+            <button type="button" aria-label="Facebook">
               <i className="bi bi-facebook"></i>
-            </a>
+            </button>
 
-            {/* Instagram link. */}
-            <a href="#" aria-label="Instagram">
+            <button type="button" aria-label="Instagram">
               <i className="bi bi-instagram"></i>
-            </a>
+            </button>
 
-            {/* LinkedIn link. */}
-            <a href="#" aria-label="LinkedIn">
+            <button type="button" aria-label="LinkedIn">
               <i className="bi bi-linkedin"></i>
-            </a>
+            </button>
 
           </div>
         </div>

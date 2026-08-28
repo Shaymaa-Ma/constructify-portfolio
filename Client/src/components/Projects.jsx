@@ -1,3 +1,4 @@
+
 // Import React hooks for effects, memoized values, and state.
 import React, { useEffect, useMemo, useState } from "react";
 
@@ -6,6 +7,11 @@ import { getProjects } from "../api/api";
 
 // Import the lightbox component for viewing project images.
 import ProjectLightbox from "./ProjectLightbox";
+
+// Base URL for uploaded images managed by the Admin.
+// Example:
+// http://localhost/construction-portfolio/uploads
+const UPLOADS_URL = process.env.REACT_APP_UPLOADS_URL;
 
 export default function Projects() {
 
@@ -90,9 +96,12 @@ export default function Projects() {
               onClick={() => setLightboxIndex(i)}
             >
 
-              {/* Project image loaded from the images folder. */}
+              {/* 
+                Project image is loaded directly from the shared uploads folder.
+                The filename comes from the database.
+              */}
               <img
-                src={`/images/${p.image}`}
+                src={`${UPLOADS_URL}/${p.image}`}
                 alt={p.title}
               />
 

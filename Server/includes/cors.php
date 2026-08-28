@@ -1,27 +1,21 @@
 <?php
 
-/*
-example of the logic flow of a request from React to the PHP API:
-React
-   ↓
-getHero()
-   ↓
-hero.php
-   ↓
-cors.php  ← allows the request
-   ↓
-db.php    ← connects to MySQL
-   ↓
-JSON response
-   ↓
-React
+$allowedOrigins = [
+    "http://localhost:3000",
+    "http://localhost:3001"
+];
 
-*/
+$origin = $_SERVER["HTTP_ORIGIN"] ?? "";
 
-// allows React to make requests to the PHP API
-// even though React and PHP are running on different origins.
-header("Access-Control-Allow-Origin: *");
+if (in_array($origin, $allowedOrigins, true)) {
+    header("Access-Control-Allow-Origin: $origin");
+}
 
-// tells the browser that the API response is JSON
-// and uses UTF-8 character encoding.
+header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization");
 header("Content-Type: application/json; charset=utf-8");
+
+if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") {
+    http_response_code(200);
+    exit();
+}

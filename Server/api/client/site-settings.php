@@ -1,7 +1,6 @@
 <?php
 
-require "../includes/cors.php";
-require "../includes/db.php";
+require_once __DIR__ . '/_bootstrap.php';
 
 // get the website settings from db, LIMIT 1 means we only need one settings record
 $settings = $conn->query(

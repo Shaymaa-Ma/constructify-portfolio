@@ -1,9 +1,15 @@
+
 // Import React hooks: useEffect for running code after rendering,
 // and useState for storing the hero data.
 import React, { useEffect, useState } from "react";
 
 // Import the API function that fetches the hero section data from the database.
 import { getHero } from "../api/api";
+
+// Base URL for uploaded images managed by the Admin.
+// Example:
+// http://localhost/construction-portfolio/uploads
+const UPLOADS_URL = process.env.REACT_APP_UPLOADS_URL;
 
 // Define and export the Hero component.
 export default function Hero() {
@@ -33,10 +39,10 @@ export default function Hero() {
   if (!hero) return <section id="home" className="hero" />;
 
   // Check if the database contains a background image.
-  // If it exists, create the image path.
+  // If it exists, create the image URL from the shared uploads folder.
   // Otherwise, set bgUrl to null.
   const bgUrl = hero.background_image
-    ? `/images/${hero.background_image}`
+    ? `${UPLOADS_URL}/${hero.background_image}`
     : null;
 
   // Return the complete Hero section.
@@ -118,7 +124,7 @@ export default function Hero() {
         </div>
       </div>
 
-      {/* 
+      {/*
         Only display the counters section if:
         1. hero.counters exists
         2. hero.counters contains at least one counter
@@ -128,7 +134,7 @@ export default function Hero() {
         // Container for all hero counters.
         <div className="hero-counters">
 
-          {/* 
+          {/*
             Loop through every counter received from the database.
             "c" represents the current counter.
             "i" represents its index.

@@ -1,7 +1,6 @@
 <?php
 
-require "../includes/cors.php";
-require "../includes/db.php";
+require_once __DIR__ . '/_bootstrap.php';
 
 // get the hero section data from the database
 // LIMIT 1 means we only need one hero section record

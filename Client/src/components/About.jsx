@@ -3,6 +3,11 @@ import React, { useEffect, useState } from "react";
 // Import the API function used to get About section data from the backend.
 import { getAbout } from "../api/api";
 
+// Base URL for uploaded images managed by the Admin.
+// Example:
+// http://localhost/construction-portfolio/uploads
+const UPLOADS_URL = process.env.REACT_APP_UPLOADS_URL;
+
 // Define and export the About component
 export default function About() {
 
@@ -43,28 +48,30 @@ export default function About() {
         <div className="about-media">
 
           {/* 
-            The image filename comes from the database
+            The image filename comes from the database.
+            The image is loaded directly from the shared uploads folder.
           */}
           <img
-            src={`/images/${about.image_primary}`}
+            src={`${UPLOADS_URL}/${about.image_primary}`}
             alt={about.title}
             className="about-img-primary"
           />
 
           {/* 
-            Small badge displayed over the images
-            The text comes from the database
+            Small badge displayed over the images.
+            The text comes from the database.
           */}
           <span className="about-badge">
             {about.overlay_badge_text}
           </span>
 
           {/* 
-            The image filename also comes from the database
-            alt is empty because this image is decorative
+            The image filename also comes from the database.
+            The image is loaded directly from the shared uploads folder.
+            alt is empty because this image is decorative.
           */}
           <img
-            src={`/images/${about.image_secondary}`}
+            src={`${UPLOADS_URL}/${about.image_secondary}`}
             alt=""
             className="about-img-secondary"
           />

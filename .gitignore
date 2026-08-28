@@ -2,9 +2,9 @@
 # React / Node
 # =========================
 
-node_modules/
-build/
-dist/
+**/node_modules/
+**/build/
+**/dist/
 
 # Environment variables
 .env
@@ -12,7 +12,6 @@ dist/
 .env.development.local
 .env.test.local
 .env.production.local
-
 
 # =========================
 # Logs
@@ -23,7 +22,6 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-
 # =========================
 # IDE / Editor
 # =========================
@@ -31,30 +29,29 @@ pnpm-debug.log*
 .vscode/
 .idea/
 
+# =========================
 # OS files
+# =========================
+
 .DS_Store
 Thumbs.db
-
 
 # =========================
 # PHP
 # =========================
 
-# PHP Composer dependencies (if used)
-vendor/
+# Composer dependencies
+**/vendor/
 
-# Local PHP configuration files
+# Local PHP configuration
 *.local.php
-
 
 # =========================
 # WAMP / XAMPP
 # =========================
 
-# Temporary files
 *.tmp
 *.temp
-
 
 # =========================
 # Backups
@@ -63,3 +60,9 @@ vendor/
 *.bak
 *.backup
 *.old
+
+# =========================
+# Local database/config files
+# =========================
+
+*.log

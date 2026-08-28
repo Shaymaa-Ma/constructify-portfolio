@@ -1,167 +1,101 @@
 /*
  * Admin/src/api/adminApi.js
  *
- * Central API client for Constructify Admin Panel.
+ * Central API client for the Constructify Admin Panel.
  *
- * ACTUAL BACKEND STRUCTURE:
+ * ADMIN BACKEND:
  *
- * construction-portfolio/
+ * http://localhost/construction-portfolio/Server/api/admin
  *
- * ├── uploads/
- * │
- * └── Server/
- *     └── api/
- *         ├── admin/
- *         │   └── auth/
- *         │       ├── login.php
- *         │       ├── logout.php
- *         │       ├── me.php
- *         │       └── register.php
- *         │
- *         └── client/
- *             ├── about/
- *             │   ├── index.php
- *             │   └── features/
- *             │       └── index.php
- *             │
- *             ├── categories/
- *             │   └── index.php
- *             │
- *             ├── hero/
- *             │   └── index.php
- *             │
- *             ├── projects/
- *             │   └── index.php
- *             │
- *             ├── services/
- *             │   ├── index.php
- *             │   └── items/
- *             │       └── index.php
- *             │
- *             └── site-settings/
- *                 └── index.php
+ * UPLOADS:
  *
- *
- * IMPORTANT:
- *
- * ADMIN AUTH APIs:
- * /Server/api/admin/
- *
- * CLIENT CONTENT APIs:
- * /Server/api/client/
- *
- * Images:
- * /uploads/
+ * http://localhost/construction-portfolio/uploads
  *
  * React Admin:
+ *
  * http://localhost:3001
+ *
+ *
+ * Backend structure:
+ *
+ * Server/
+ * └── api/
+ *     └── admin/
+ *         ├── about/
+ *         │   ├── index.php
+ *         │   └── features/
+ *         │       └── index.php
+ *         │
+ *         ├── auth/
+ *         │   ├── login.php
+ *         │   ├── logout.php
+ *         │   ├── me.php
+ *         │   └── register.php
+ *         │
+ *         ├── categories/
+ *         │   └── index.php
+ *         │
+ *         ├── hero/
+ *         │   └── index.php
+ *         │
+ *         ├── projects/
+ *         │   └── index.php
+ *         │
+ *         ├── services/
+ *         │   ├── index.php
+ *         │   └── items/
+ *         │       └── index.php
+ *         │
+ *         ├── site-settings/
+ *         │   └── index.php
+ *         │
+ *         └── _bootstrap.php
  */
 
 
 /* =========================================================
-   BASE URL
+   API BASE URL
 ========================================================= */
+
+const DEFAULT_API_BASE_URL =
+  "http://localhost/construction-portfolio/Server/api";
+
 
 const API_BASE_URL =
   (typeof import.meta !== "undefined" &&
     import.meta.env &&
     import.meta.env.VITE_API_BASE_URL) ||
-  "http://localhost/construction-portfolio/Server/api";
+  DEFAULT_API_BASE_URL;
 
 
 /* =========================================================
-   SEPARATE API BASE URLS
+   ADMIN API BASE URL
 ========================================================= */
 
-/*
- * Authentication belongs to /admin
- */
+const DEFAULT_ADMIN_API_BASE_URL =
+  `${API_BASE_URL.replace(/\/+$/, "")}/admin`;
+
 
 const ADMIN_BASE_URL =
   (typeof import.meta !== "undefined" &&
     import.meta.env &&
     import.meta.env.VITE_ADMIN_API_BASE_URL) ||
-  `${API_BASE_URL}/admin`;
-
-
-/*
- * Website content belongs to /client
- */
-
-const CLIENT_BASE_URL =
-  (typeof import.meta !== "undefined" &&
-    import.meta.env &&
-    import.meta.env.VITE_CLIENT_API_BASE_URL) ||
-  `${API_BASE_URL}/client`;
+  DEFAULT_ADMIN_API_BASE_URL;
 
 
 /* =========================================================
-   UPLOADS URL
+   UPLOADS BASE URL
 ========================================================= */
+
+const DEFAULT_UPLOADS_BASE_URL =
+  "http://localhost/construction-portfolio/uploads";
+
 
 export const UPLOADS_BASE_URL =
   (typeof import.meta !== "undefined" &&
     import.meta.env &&
     import.meta.env.VITE_UPLOADS_BASE_URL) ||
-  "http://localhost/construction-portfolio/uploads";
-
-
-/*
- * Helper for displaying uploaded images.
- *
- * Examples:
- *
- * getImageUrl("hero.jpg")
- *
- * getImageUrl("/uploads/hero.jpg")
- *
- * getImageUrl("uploads/hero.jpg")
- */
-
-export function getImageUrl(image) {
-
-  if (!image) {
-    return "";
-  }
-
-  const value = String(image).trim();
-
-  if (!value) {
-    return "";
-  }
-
-  /*
-   * Already a complete URL.
-   */
-
-  if (
-    value.startsWith("http://") ||
-    value.startsWith("https://") ||
-    value.startsWith("data:")
-  ) {
-    return value;
-  }
-
-
-  /*
-   * Remove leading slash.
-   */
-
-  let clean = value.replace(/^\/+/, "");
-
-
-  /*
-   * If database already contains uploads/,
-   * do not add uploads twice.
-   */
-
-  if (clean.startsWith("uploads/")) {
-    clean = clean.substring("uploads/".length);
-  }
-
-
-  return `${UPLOADS_BASE_URL}/${clean}`;
-}
+  DEFAULT_UPLOADS_BASE_URL;
 
 
 /* =========================================================
@@ -172,6 +106,9 @@ const TOKEN_STORAGE_KEY =
   "constructify_admin_token";
 
 
+/**
+ * Get authentication token.
+ */
 export function getToken() {
 
   try {
@@ -189,24 +126,41 @@ export function getToken() {
 }
 
 
+/**
+ * Store authentication token.
+ */
 export function setToken(token) {
 
   try {
 
-    if (token) {
+    if (
+      token !== undefined &&
+      token !== null &&
+      String(token).trim() !== ""
+    ) {
 
       localStorage.setItem(
         TOKEN_STORAGE_KEY,
-        token
+        String(token)
       );
 
     }
 
-  } catch {}
+  } catch (error) {
+
+    console.error(
+      "Unable to save authentication token:",
+      error
+    );
+
+  }
 
 }
 
 
+/**
+ * Remove authentication token.
+ */
 export function clearToken() {
 
   try {
@@ -215,7 +169,132 @@ export function clearToken() {
       TOKEN_STORAGE_KEY
     );
 
-  } catch {}
+  } catch (error) {
+
+    console.error(
+      "Unable to clear authentication token:",
+      error
+    );
+
+  }
+
+}
+
+
+/* =========================================================
+   IMAGE URL
+========================================================= */
+
+/**
+ * Convert an image path returned by PHP/database
+ * into a complete browser URL.
+ *
+ * Supported values:
+ *
+ * hero.jpg
+ *
+ * /hero.jpg
+ *
+ * uploads/hero.jpg
+ *
+ * /uploads/hero.jpg
+ *
+ * http://localhost/...
+ *
+ * https://...
+ */
+export function getImageUrl(image) {
+
+  if (
+    image === undefined ||
+    image === null
+  ) {
+
+    return "";
+
+  }
+
+
+  const value =
+    String(image).trim();
+
+
+  if (!value) {
+
+    return "";
+
+  }
+
+
+  /*
+   * Already a complete URL.
+   */
+  if (
+    value.startsWith("http://") ||
+    value.startsWith("https://") ||
+    value.startsWith("data:") ||
+    value.startsWith("blob:")
+  ) {
+
+    return value;
+
+  }
+
+
+  /*
+   * Convert backslashes to forward slashes.
+   */
+  let clean =
+    value.replace(/\\/g, "/");
+
+
+  /*
+   * Remove leading slash.
+   */
+  clean =
+    clean.replace(/^\/+/, "");
+
+
+  /*
+   * Remove localhost/construction-portfolio/
+   * if the database accidentally stores a full
+   * project-relative path.
+   */
+  clean = clean.replace(
+    /^localhost\/construction-portfolio\//i,
+    ""
+  );
+
+
+  clean = clean.replace(
+    /^construction-portfolio\//i,
+    ""
+  );
+
+
+  /*
+   * If the database contains:
+   *
+   * uploads/image.jpg
+   *
+   * remove "uploads/" because UPLOADS_BASE_URL
+   * already points to /uploads.
+   */
+  clean = clean.replace(
+    /^uploads\//i,
+    ""
+  );
+
+
+  /*
+   * Final URL:
+   *
+   * http://localhost/construction-portfolio/uploads/image.jpg
+   */
+  return `${UPLOADS_BASE_URL.replace(
+    /\/+$/,
+    ""
+  )}/${clean}`;
 
 }
 
@@ -231,18 +310,23 @@ function buildUrl(
 ) {
 
   const cleanBase =
-    String(base).replace(/\/+$/, "");
+    String(base).replace(
+      /\/+$/,
+      ""
+    );
+
 
   const cleanPath =
-    String(path).replace(/^\/+/, "");
+    String(path).replace(
+      /^\/+/,
+      ""
+    );
 
 
-  const url = new URL(
-    `${cleanBase}/${cleanPath}`,
-    typeof window !== "undefined"
-      ? window.location.origin
-      : "http://localhost"
-  );
+  const url =
+    new URL(
+      `${cleanBase}/${cleanPath}`
+    );
 
 
   if (params) {
@@ -275,37 +359,37 @@ function buildUrl(
 
 
 /* =========================================================
-   HEADERS
+   AUTH HEADERS
 ========================================================= */
 
-function authHeaders() {
+function authHeaders(
+  hasJsonBody = false
+) {
 
   const headers = {};
 
-  const token = getToken();
+
+  if (hasJsonBody) {
+
+    headers["Content-Type"] =
+      "application/json";
+
+  }
+
+
+  const token =
+    getToken();
+
 
   if (token) {
 
-    headers.Authorization =
+    headers["Authorization"] =
       `Bearer ${token}`;
 
   }
 
+
   return headers;
-
-}
-
-
-function jsonHeaders() {
-
-  return {
-
-    ...authHeaders(),
-
-    "Content-Type":
-      "application/json",
-
-  };
 
 }
 
@@ -320,6 +404,7 @@ async function parseResponse(
 
   let body = null;
 
+
   const contentType =
     response.headers.get(
       "content-type"
@@ -329,31 +414,42 @@ async function parseResponse(
   try {
 
     if (
-      contentType.includes(
-        "application/json"
-      )
+      contentType
+        .toLowerCase()
+        .includes(
+          "application/json"
+        )
     ) {
 
-      body = await response.json();
+      body =
+        await response.json();
 
     } else {
 
       const text =
         await response.text();
 
-      try {
 
-        body = JSON.parse(text);
+      if (text.trim()) {
 
-      } catch {
+        try {
 
-        body = null;
+          body =
+            JSON.parse(text);
+
+        } catch {
+
+          body = {
+            raw: text
+          };
+
+        }
 
       }
 
     }
 
-  } catch {
+  } catch (error) {
 
     body = null;
 
@@ -361,10 +457,11 @@ async function parseResponse(
 
 
   /*
-   * Token expired.
+   * Authentication failure.
    */
-
-  if (response.status === 401) {
+  if (
+    response.status === 401
+  ) {
 
     clearToken();
 
@@ -374,22 +471,25 @@ async function parseResponse(
   /*
    * HTTP error.
    */
-
   if (!response.ok) {
 
-    throw new Error(
+    const message =
       body?.error ||
       body?.message ||
-      `Request failed (HTTP ${response.status})`
+      body?.raw ||
+      `Request failed (HTTP ${response.status})`;
+
+
+    throw new Error(
+      message
     );
 
   }
 
 
   /*
-   * API-level error.
+   * Application-level error.
    */
-
   if (
     body &&
     body.success === false
@@ -419,13 +519,25 @@ async function request(
   {
     params,
     body,
-    base,
   } = {}
 ) {
 
+  /*
+   * IMPORTANT:
+   *
+   * Every Admin request ALWAYS uses
+   * ADMIN_BASE_URL.
+   *
+   * There is intentionally no "base"
+   * parameter here.
+   *
+   * This prevents Admin code from
+   * accidentally calling /client/.
+   */
+
   const url =
     buildUrl(
-      base || CLIENT_BASE_URL,
+      ADMIN_BASE_URL,
       path,
       params
     );
@@ -435,35 +547,46 @@ async function request(
 
 
   try {
+    response = await fetch(
+      url,
+      {
+        method,
 
-    response =
-      await fetch(
-        url,
-        {
-          method,
+        credentials: "include",
 
-          headers:
+        headers:
+          authHeaders(
             body !== undefined
-              ? jsonHeaders()
-              : authHeaders(),
+          ),
 
-          body:
-            body !== undefined
-              ? JSON.stringify(body)
-              : undefined,
-        }
-      );
-
+        body:
+          body !== undefined
+            ? JSON.stringify(body)
+            : undefined,
+      }
+    );
   } catch (error) {
 
+    console.error(
+      "API connection error:",
+      {
+        url,
+        method,
+        error,
+      }
+    );
+
+
     throw new Error(
-      "Unable to connect to the API. Please check that WAMP/Apache is running and the API URL is correct."
+      "Unable to connect to the API. Please check that WAMP/Apache is running and that the Admin API URL is correct."
     );
 
   }
 
 
-  return parseResponse(response);
+  return parseResponse(
+    response
+  );
 
 }
 
@@ -478,13 +601,17 @@ async function formRequest(
   {
     params,
     formData,
-    base,
   } = {}
 ) {
 
+  /*
+   * Admin FormData requests also ALWAYS
+   * use ADMIN_BASE_URL.
+   */
+
   const url =
     buildUrl(
-      base || CLIENT_BASE_URL,
+      ADMIN_BASE_URL,
       path,
       params
     );
@@ -507,40 +634,43 @@ async function formRequest(
 
   try {
 
-    /*
-     * IMPORTANT:
-     *
-     * Do NOT set Content-Type here.
-     *
-     * Browser creates:
-     *
-     * multipart/form-data;
-     * boundary=...
-     */
+    response = await fetch(
+      url,
+      {
+        method,
 
-    response =
-      await fetch(
-        url,
-        {
-          method,
+        credentials: "include",
 
-          headers:
-            authHeaders(),
+        headers:
+          authHeaders(false),
 
-          body: formData,
-        }
-      );
+        body:
+          formData,
+      }
+    );
 
   } catch (error) {
 
+    console.error(
+      "API connection error:",
+      {
+        url,
+        method,
+        error,
+      }
+    );
+
+
     throw new Error(
-      "Unable to connect to the API. Please check that WAMP/Apache is running and the API URL is correct."
+      "Unable to connect to the API. Please check that WAMP/Apache is running and that the Admin API URL is correct."
     );
 
   }
 
 
-  return parseResponse(response);
+  return parseResponse(
+    response
+  );
 
 }
 
@@ -571,9 +701,8 @@ function createFormData(
 
 
       /*
-       * File
+       * File.
        */
-
       if (
         typeof File !== "undefined" &&
         value instanceof File
@@ -590,9 +719,8 @@ function createFormData(
 
 
       /*
-       * Blob
+       * Blob.
        */
-
       if (
         typeof Blob !== "undefined" &&
         value instanceof Blob
@@ -609,9 +737,8 @@ function createFormData(
 
 
       /*
-       * Normal value
+       * Normal value.
        */
-
       formData.append(
         key,
         String(value)
@@ -627,16 +754,45 @@ function createFormData(
 
 
 /* =========================================================
+   DETECT FILE
+========================================================= */
+
+function containsFile(
+  value
+) {
+
+  if (!value) {
+
+    return false;
+
+  }
+
+
+  return (
+    (
+      typeof File !== "undefined" &&
+      value instanceof File
+    ) ||
+    (
+      typeof Blob !== "undefined" &&
+      value instanceof Blob
+    )
+  );
+
+}
+
+
+/* =========================================================
    AUTH API
- *
- * IMPORTANT:
- * Authentication is inside:
- *
- * /Server/api/admin/auth/
 ========================================================= */
 
 export const authApi = {
 
+  /*
+   * POST
+   *
+   * /Server/api/admin/auth/login.php
+   */
   login: async ({
     email,
     password,
@@ -647,9 +803,6 @@ export const authApi = {
         "POST",
         "/auth/login.php",
         {
-          base:
-            ADMIN_BASE_URL,
-
           body: {
             email,
             password,
@@ -658,7 +811,18 @@ export const authApi = {
       );
 
 
-    if (res.data?.token) {
+    /*
+     * Support:
+     *
+     * {
+     *   data: {
+     *     token: "..."
+     *   }
+     * }
+     */
+    if (
+      res.data?.token
+    ) {
 
       setToken(
         res.data.token
@@ -667,7 +831,16 @@ export const authApi = {
     }
 
 
-    if (res.token) {
+    /*
+     * Support:
+     *
+     * {
+     *   token: "..."
+     * }
+     */
+    else if (
+      res.token
+    ) {
 
       setToken(
         res.token
@@ -681,6 +854,11 @@ export const authApi = {
   },
 
 
+  /*
+   * POST
+   *
+   * /Server/api/admin/auth/register.php
+   */
   register: async ({
     name,
     email,
@@ -693,27 +871,20 @@ export const authApi = {
         "POST",
         "/auth/register.php",
         {
-          base:
-            ADMIN_BASE_URL,
-
           body: {
-
             name,
-
             email,
-
             password,
-
             invite_code:
               inviteCode,
-
           },
-
         }
       );
 
 
-    if (res.data?.token) {
+    if (
+      res.data?.token
+    ) {
 
       setToken(
         res.data.token
@@ -722,7 +893,9 @@ export const authApi = {
     }
 
 
-    if (res.token) {
+    else if (
+      res.token
+    ) {
 
       setToken(
         res.token
@@ -736,17 +909,23 @@ export const authApi = {
   },
 
 
+  /*
+   * GET
+   *
+   * /Server/api/admin/auth/me.php
+   */
   me: () =>
     request(
       "GET",
-      "/auth/me.php",
-      {
-        base:
-          ADMIN_BASE_URL,
-      }
+      "/auth/me.php"
     ),
 
 
+  /*
+   * POST
+   *
+   * /Server/api/admin/auth/logout.php
+   */
   logout: async () => {
 
     try {
@@ -755,9 +934,6 @@ export const authApi = {
         "POST",
         "/auth/logout.php",
         {
-          base:
-            ADMIN_BASE_URL,
-
           body: {},
         }
       );
@@ -774,13 +950,16 @@ export const authApi = {
 
 
 /* =========================================================
-   SITE SETTINGS
- *
- * /Server/api/client/site-settings/
+   SITE SETTINGS API
 ========================================================= */
 
 export const siteSettingsApi = {
 
+  /*
+   * GET
+   *
+   * /admin/site-settings/index.php
+   */
   get: () =>
     request(
       "GET",
@@ -788,7 +967,14 @@ export const siteSettingsApi = {
     ),
 
 
-  update: (fields) =>
+  /*
+   * PUT
+   *
+   * /admin/site-settings/index.php
+   */
+  update: (
+    fields
+  ) =>
     request(
       "PUT",
       "/site-settings/index.php",
@@ -798,13 +984,20 @@ export const siteSettingsApi = {
     ),
 
 
-  updateWithImage: async (
+  /*
+   * Multipart update.
+   *
+   * Useful if Site Settings contains
+   * an image upload.
+   */
+  updateWithImage: (
     fields
   ) => {
 
     const formData =
       createFormData({
         ...fields,
+
         _method: "PUT",
       });
 
@@ -823,13 +1016,16 @@ export const siteSettingsApi = {
 
 
 /* =========================================================
-   HERO
- *
- * /Server/api/client/hero/
+   HERO API
 ========================================================= */
 
 export const heroApi = {
 
+  /*
+   * GET
+   *
+   * /admin/hero/index.php
+   */
   get: () =>
     request(
       "GET",
@@ -837,30 +1033,176 @@ export const heroApi = {
     ),
 
 
-  update: (fields) =>
-    request(
-      "PUT",
-      "/hero/index.php",
-      {
-        body: fields,
-      }
-    ),
-
-
   /*
-   * Update hero including image.
+   * UPDATE HERO
+   *
+   * PHP endpoint expects POST.
+   *
+   * We always use multipart/form-data because:
+   * - Hero can contain an image
+   * - Hero contains counters
+   * - PHP reads data from $_POST
    */
+  update: async (fields = {}) => {
 
-  updateWithImage: async (
-    fields
-  ) => {
+    const formData = new FormData();
 
-    const formData =
-      createFormData({
-        ...fields,
-        _method: "PUT",
-      });
 
+    /* =====================================================
+       HERO ID
+    ===================================================== */
+
+    if (
+      fields.id !== undefined &&
+      fields.id !== null
+    ) {
+
+      formData.append(
+        "id",
+        String(fields.id)
+      );
+
+    }
+
+
+    /* =====================================================
+       HERO TEXT FIELDS
+    ===================================================== */
+
+    const heroFields = [
+      "badge_text",
+      "title_text",
+      "title_highlight",
+      "subtitle",
+      "primary_btn_text",
+      "primary_btn_link",
+      "secondary_btn_text",
+      "secondary_btn_link",
+    ];
+
+
+    heroFields.forEach((field) => {
+
+      if (
+        fields[field] !== undefined &&
+        fields[field] !== null
+      ) {
+
+        formData.append(
+          field,
+          String(fields[field])
+        );
+
+      }
+
+    });
+
+
+    /* =====================================================
+       BACKGROUND IMAGE
+    ===================================================== */
+
+    /*
+     * Your PHP expects:
+     *
+     * $_FILES['background_image']
+     *
+     * Therefore React must send:
+     *
+     * background_image
+     */
+
+    const image =
+      fields.background_image ||
+      fields.image;
+
+
+    if (
+      containsFile(image)
+    ) {
+
+      formData.append(
+        "background_image",
+        image
+      );
+
+    }
+
+
+    /* =====================================================
+       COUNTERS
+    ===================================================== */
+
+    /*
+     * PHP expects:
+     *
+     * counters[0][id]
+     * counters[0][icon]
+     * counters[0][value]
+     * counters[0][label]
+     * counters[0][display_order]
+     */
+
+    if (
+      Array.isArray(fields.counters)
+    ) {
+
+      fields.counters.forEach(
+        (counter, index) => {
+
+          if (!counter) {
+            return;
+          }
+
+
+          if (
+            counter.id !== undefined &&
+            counter.id !== null
+          ) {
+
+            formData.append(
+              `counters[${index}][id]`,
+              String(counter.id)
+            );
+
+          }
+
+
+          formData.append(
+            `counters[${index}][icon]`,
+            String(counter.icon ?? "")
+          );
+
+
+          formData.append(
+            `counters[${index}][value]`,
+            String(counter.value ?? "")
+          );
+
+
+          formData.append(
+            `counters[${index}][label]`,
+            String(counter.label ?? "")
+          );
+
+
+          formData.append(
+            `counters[${index}][display_order]`,
+            String(
+              counter.display_order ??
+              index
+            )
+          );
+
+        }
+      );
+
+    }
+
+
+    /* =====================================================
+       SEND
+    ===================================================== */
 
     return formRequest(
       "POST",
@@ -872,17 +1214,38 @@ export const heroApi = {
 
   },
 
+
+  /*
+   * Explicit multipart update.
+   *
+   * Kept for compatibility with Hero.jsx
+   */
+  updateWithImage: async (
+    fields = {}
+  ) => {
+
+    return heroApi.update(
+      fields
+    );
+
+  },
+
 };
 
 
+
+
 /* =========================================================
-   ABOUT
- *
- * /Server/api/client/about/
+   ABOUT API
 ========================================================= */
 
 export const aboutApi = {
 
+  /*
+   * GET
+   *
+   * /admin/about/index.php
+   */
   get: () =>
     request(
       "GET",
@@ -890,30 +1253,125 @@ export const aboutApi = {
     ),
 
 
-  update: (fields) =>
-    request(
-      "PUT",
-      "/about/index.php",
-      {
-        body: fields,
-      }
-    ),
-
-
   /*
-   * Update About including image.
+   * UPDATE ABOUT
+   *
+   * PHP endpoint expects POST.
+   *
+   * Always use multipart/form-data,
+   * because About supports:
+   *
+   * image_primary
+   * image_secondary
    */
-
-  updateWithImage: async (
-    fields
+  update: async (
+    fields = {}
   ) => {
 
     const formData =
-      createFormData({
-        ...fields,
-        _method: "PUT",
-      });
+      new FormData();
 
+
+    /* =====================================================
+       ABOUT ID
+    ===================================================== */
+
+    if (
+      fields.id !== undefined &&
+      fields.id !== null
+    ) {
+
+      formData.append(
+        "id",
+        String(fields.id)
+      );
+
+    }
+
+
+    /* =====================================================
+       ABOUT TEXT FIELDS
+    ===================================================== */
+
+    const aboutFields = [
+
+      "badge_text",
+
+      "title",
+
+      "description",
+
+      "overlay_badge_text",
+
+      "primary_btn_text",
+
+      "primary_btn_link",
+
+      "secondary_btn_text",
+
+      "secondary_btn_link",
+
+    ];
+
+
+    aboutFields.forEach(
+      (field) => {
+
+        if (
+          fields[field] !== undefined &&
+          fields[field] !== null
+        ) {
+
+          formData.append(
+            field,
+            String(fields[field])
+          );
+
+        }
+
+      }
+    );
+
+
+    /* =====================================================
+       PRIMARY IMAGE
+    ===================================================== */
+
+    if (
+      containsFile(
+        fields.image_primary
+      )
+    ) {
+
+      formData.append(
+        "image_primary",
+        fields.image_primary
+      );
+
+    }
+
+
+    /* =====================================================
+       SECONDARY IMAGE
+    ===================================================== */
+
+    if (
+      containsFile(
+        fields.image_secondary
+      )
+    ) {
+
+      formData.append(
+        "image_secondary",
+        fields.image_secondary
+      );
+
+    }
+
+
+    /* =====================================================
+       SEND
+    ===================================================== */
 
     return formRequest(
       "POST",
@@ -921,6 +1379,22 @@ export const aboutApi = {
       {
         formData,
       }
+    );
+
+  },
+
+
+  /*
+   * Explicit multipart update.
+   *
+   * Kept for compatibility with About.jsx.
+   */
+  updateWithImage: async (
+    fields = {}
+  ) => {
+
+    return aboutApi.update(
+      fields
     );
 
   },
@@ -932,6 +1406,9 @@ export const aboutApi = {
 
   features: {
 
+    /*
+     * GET ALL
+     */
     list: async () => {
 
       const res =
@@ -946,6 +1423,9 @@ export const aboutApi = {
     },
 
 
+    /*
+     * GET ONE
+     */
     getOne: async (
       id
     ) => {
@@ -967,58 +1447,112 @@ export const aboutApi = {
     },
 
 
+    /*
+     * UPDATE FEATURE
+     *
+     * PHP endpoint uses POST,
+     * following the same approach as Hero.
+     */
     update: async (
       id,
-      feature
+      feature = {}
     ) => {
 
-      /*
-       * If feature contains a File,
-       * automatically use multipart.
-       */
-
-      const hasImage =
-        feature?.image instanceof File ||
-        feature?.image instanceof Blob;
+      const formData =
+        new FormData();
 
 
-      if (hasImage) {
+      /* -----------------------------------------------
+         ID
+      ----------------------------------------------- */
 
-        const formData =
-          createFormData({
-            ...feature,
-
-            id,
-
-            _method: "PUT",
-          });
+      formData.append(
+        "id",
+        String(id)
+      );
 
 
-        return formRequest(
-          "POST",
-          "/about/features/index.php",
-          {
-            formData,
+      /* -----------------------------------------------
+         Fields
+      ----------------------------------------------- */
+
+      const featureFields = [
+
+        "icon",
+
+        "title",
+
+        "description",
+
+        "display_order",
+
+      ];
+
+
+      featureFields.forEach(
+        (field) => {
+
+          if (
+            feature[field] !== undefined &&
+            feature[field] !== null
+          ) {
+
+            formData.append(
+              field,
+              String(feature[field])
+            );
+
           }
+
+        }
+      );
+
+
+      /* -----------------------------------------------
+         Image
+      ----------------------------------------------- */
+
+      if (
+        containsFile(
+          feature.image
+        )
+      ) {
+
+        formData.append(
+          "image",
+          feature.image
         );
 
       }
 
 
-      const res =
-        await request(
-          "PUT",
-          "/about/features/index.php",
-          {
-            body: {
-              ...feature,
-              id,
-            },
-          }
-        );
+      /* -----------------------------------------------
+         SEND
+      ----------------------------------------------- */
+
+      return formRequest(
+        "POST",
+        "/about/features/index.php",
+        {
+          formData,
+        }
+      );
+
+    },
 
 
-      return res;
+    /*
+     * Explicit multipart update.
+     */
+    updateWithImage: async (
+      id,
+      feature = {}
+    ) => {
+
+      return aboutApi.features.update(
+        id,
+        feature
+      );
 
     },
 
@@ -1028,66 +1562,243 @@ export const aboutApi = {
 
 
 /* =========================================================
-   SERVICES
- *
- * /Server/api/client/services/
+   SERVICES API
 ========================================================= */
 
 export const servicesApi = {
 
-  /*
-   * SERVICES SECTION
-   */
+  /* =======================================================
+     SERVICES SECTION
+  ======================================================= */
 
-  getSection: () =>
-    request(
+  /*
+   * GET SECTION + COUNTERS
+   *
+   * GET:
+   * /Server/api/admin/services/index.php
+   */
+  get: async () => {
+
+    return request(
       "GET",
       "/services/index.php"
-    ),
+    );
 
-
-  updateSection: (
-    fields
-  ) =>
-    request(
-      "PUT",
-      "/services/index.php",
-      {
-        body: fields,
-      }
-    ),
+  },
 
 
   /*
-   * Services section image.
+   * Compatibility method for Services.jsx
+   */
+  getSection: async () => {
+
+    return request(
+      "GET",
+      "/services/index.php"
+    );
+
+  },
+
+
+  /* =======================================================
+     UPDATE SERVICES SECTION
+  ======================================================= */
+
+  /*
+   * PHP expects:
+   *
+   * POST + _method=PUT
+   *
+   * Because the request may contain:
+   * - text fields
+   * - panel_image
+   * - counters
    */
 
-  updateSectionWithImage:
-    async (fields) => {
+  update: async (
+    fields = {}
+  ) => {
 
-      const formData =
-        createFormData({
-          ...fields,
-          _method: "PUT",
-        });
+    const formData =
+      new FormData();
 
 
-      return formRequest(
-        "POST",
-        "/services/index.php",
-        {
-          formData,
-        }
+    /* -----------------------------------------------------
+       ID
+    ----------------------------------------------------- */
+
+    if (
+      fields.id !== undefined &&
+      fields.id !== null &&
+      fields.id !== ""
+    ) {
+
+      formData.append(
+        "id",
+        String(fields.id)
       );
 
-    },
+    }
 
 
-  /* -------------------------------------------------------
+    /* -----------------------------------------------------
+       METHOD OVERRIDE
+    ----------------------------------------------------- */
+
+    formData.append(
+      "_method",
+      "PUT"
+    );
+
+
+    /* -----------------------------------------------------
+       SECTION FIELDS
+    ----------------------------------------------------- */
+
+    const sectionFields = [
+      "title",
+      "subtitle",
+      "panel_title",
+      "panel_btn_text",
+      "panel_btn_link",
+      "stats_badge_text",
+      "stats_title",
+      "stats_description",
+      "stats_btn_text",
+      "stats_btn_link",
+    ];
+
+
+    sectionFields.forEach(
+      (field) => {
+
+        if (
+          fields[field] !== undefined &&
+          fields[field] !== null
+        ) {
+
+          formData.append(
+            field,
+            String(fields[field])
+          );
+
+        }
+
+      }
+    );
+
+
+    /* -----------------------------------------------------
+       PANEL IMAGE
+    ----------------------------------------------------- */
+
+    if (
+      containsFile(
+        fields.panel_image
+      )
+    ) {
+
+      formData.append(
+        "panel_image",
+        fields.panel_image
+      );
+
+    }
+
+
+    /* -----------------------------------------------------
+       COUNTERS
+    ----------------------------------------------------- */
+
+    if (
+      Array.isArray(fields.counters)
+    ) {
+
+      formData.append(
+        "counters",
+        JSON.stringify(
+          fields.counters
+        )
+      );
+
+    }
+
+
+    /* -----------------------------------------------------
+       DEBUG
+    ----------------------------------------------------- */
+
+    console.log(
+      "SERVICES UPDATE FORM DATA:"
+    );
+
+    for (
+      const [key, value]
+      of formData.entries()
+    ) {
+
+      console.log(
+        key,
+        value
+      );
+
+    }
+
+
+    /* -----------------------------------------------------
+       SEND
+    ----------------------------------------------------- */
+
+    return formRequest(
+      "POST",
+      "/services/index.php",
+      {
+        formData,
+      }
+    );
+
+  },
+
+
+  /* =======================================================
+     UPDATE SECTION
+  ======================================================= */
+
+  updateSection: async (
+    fields = {}
+  ) => {
+
+    return servicesApi.update(
+      fields
+    );
+
+  },
+
+
+  /* =======================================================
+     UPDATE SECTION WITH IMAGE
+  ======================================================= */
+
+  updateSectionWithImage: async (
+    fields = {}
+  ) => {
+
+    return servicesApi.update(
+      fields
+    );
+
+  },
+
+
+  /* =======================================================
      SERVICE ITEMS
-  ------------------------------------------------------- */
+  ======================================================= */
 
   items: {
+
+    /* -----------------------------------------------------
+       GET ALL SERVICES
+    ----------------------------------------------------- */
 
     list: async () => {
 
@@ -1098,14 +1809,35 @@ export const servicesApi = {
         );
 
 
-      return res.data || [];
+      return Array.isArray(
+        res?.data
+      )
+        ? res.data
+        : [];
 
     },
 
 
+    /* -----------------------------------------------------
+       GET ONE SERVICE
+    ----------------------------------------------------- */
+
     getOne: async (
       id
     ) => {
+
+      if (
+        id === undefined ||
+        id === null ||
+        id === ""
+      ) {
+
+        throw new Error(
+          "Service ID is required."
+        );
+
+      }
+
 
       const res =
         await request(
@@ -1119,111 +1851,161 @@ export const servicesApi = {
         );
 
 
-      return res.data;
+      return res?.data || null;
 
     },
 
 
+    /* -----------------------------------------------------
+       UPDATE SERVICE
+    ----------------------------------------------------- */
+
     update: async (
       id,
-      service
+      service = {}
     ) => {
 
-      const hasImage =
-        service?.image instanceof File ||
-        service?.image instanceof Blob;
+      if (
+        id === undefined ||
+        id === null ||
+        id === ""
+      ) {
 
-
-      /*
-       * Image update.
-       */
-
-      if (hasImage) {
-
-        const formData =
-          createFormData({
-            ...service,
-
-            id,
-
-            _method: "PUT",
-          });
-
-
-        return formRequest(
-          "POST",
-          "/services/items/index.php",
-          {
-            formData,
-          }
+        throw new Error(
+          "Service ID is required."
         );
 
       }
 
 
-      /*
-       * Normal JSON update.
-       */
+      const formData =
+        new FormData();
 
-      const res =
-        await request(
-          "PUT",
-          "/services/items/index.php",
-          {
-            body: {
-              ...service,
-              id,
-            },
+
+      /* ---------------------------------------------------
+         ID
+      --------------------------------------------------- */
+
+      formData.append(
+        "id",
+        String(id)
+      );
+
+
+      /* ---------------------------------------------------
+         METHOD OVERRIDE
+      --------------------------------------------------- */
+
+      formData.append(
+        "_method",
+        "PUT"
+      );
+
+
+      /* ---------------------------------------------------
+         SERVICE FIELDS
+      --------------------------------------------------- */
+
+      const serviceFields = [
+        "icon",
+        "title",
+        "description",
+        "display_order",
+      ];
+
+
+      serviceFields.forEach(
+        (field) => {
+
+          if (
+            service[field] !== undefined &&
+            service[field] !== null
+          ) {
+
+            formData.append(
+              field,
+              String(service[field])
+            );
+
           }
+
+        }
+      );
+
+
+      /* ---------------------------------------------------
+         DEBUG
+      --------------------------------------------------- */
+
+      console.log(
+        "SERVICE ITEM UPDATE:"
+      );
+
+      for (
+        const [key, value]
+        of formData.entries()
+      ) {
+
+        console.log(
+          key,
+          value
         );
 
+      }
 
-      return res;
+
+      /* ---------------------------------------------------
+         SEND
+      --------------------------------------------------- */
+
+      return formRequest(
+        "POST",
+        "/services/items/index.php",
+        {
+          formData,
+        }
+      );
 
     },
 
 
-    updateWithImage:
-      async (
+    /* -----------------------------------------------------
+       UPDATE SERVICE WITH IMAGE
+       -----------------------------------------------------
+       Not currently needed because your PHP service-item
+       endpoint has no image field.
+    */
+
+    updateWithImage: async (
+      id,
+      service = {}
+    ) => {
+
+      return servicesApi.items.update(
         id,
         service
-      ) => {
+      );
 
-        const formData =
-          createFormData({
-            ...service,
-
-            id,
-
-            _method: "PUT",
-          });
-
-
-        return formRequest(
-          "POST",
-          "/services/items/index.php",
-          {
-            formData,
-          }
-        );
-
-      },
+    },
 
   },
 
 };
 
 
+
 /* =========================================================
-   CATEGORIES
- *
- * /Server/api/client/categories/
- *
- * FULL CRUD
+   CATEGORIES API
+   FULL CRUD
 ========================================================= */
 
 export const categoriesApi = {
 
+  /*
+   * GET ALL
+   *
+   * /admin/categories/index.php
+   */
   list: async () => {
 
     const res =
@@ -1238,6 +2020,9 @@ export const categoriesApi = {
   },
 
 
+  /*
+   * GET ONE
+   */
   getOne: async (
     id
   ) => {
@@ -1259,19 +2044,23 @@ export const categoriesApi = {
   },
 
 
+  /*
+   * CREATE
+   */
   create: async (
     category
   ) => {
 
-    const hasImage =
-      category?.image instanceof File ||
-      category?.image instanceof Blob;
-
-
-    if (hasImage) {
+    if (
+      containsFile(
+        category?.image
+      )
+    ) {
 
       const formData =
-        createFormData(category);
+        createFormData(
+          category
+        );
 
 
       return formRequest(
@@ -1296,21 +2085,19 @@ export const categoriesApi = {
   },
 
 
+  /*
+   * UPDATE
+   */
   update: async (
     id,
     category
   ) => {
 
-    const hasImage =
-      category?.image instanceof File ||
-      category?.image instanceof Blob;
-
-
-    /*
-     * Update with image.
-     */
-
-    if (hasImage) {
+    if (
+      containsFile(
+        category?.image
+      )
+    ) {
 
       const formData =
         createFormData({
@@ -1333,10 +2120,6 @@ export const categoriesApi = {
     }
 
 
-    /*
-     * Normal update.
-     */
-
     return request(
       "PUT",
       "/categories/index.php",
@@ -1352,38 +2135,42 @@ export const categoriesApi = {
   },
 
 
-  updateWithImage:
-    async (
-      id,
-      category
-    ) => {
-
-      const formData =
-        createFormData({
-          ...category,
-
-          id,
-
-          _method: "PUT",
-        });
-
-
-      return formRequest(
-        "POST",
-        "/categories/index.php",
-        {
-          formData,
-        }
-      );
-
-    },
-
-
-  remove: async (
-    id
+  /*
+   * Explicit image update.
+   */
+  updateWithImage: async (
+    id,
+    category
   ) => {
 
-    return request(
+    const formData =
+      createFormData({
+        ...category,
+
+        id,
+
+        _method: "PUT",
+      });
+
+
+    return formRequest(
+      "POST",
+      "/categories/index.php",
+      {
+        formData,
+      }
+    );
+
+  },
+
+
+  /*
+   * DELETE
+   */
+  remove: (
+    id
+  ) =>
+    request(
       "DELETE",
       "/categories/index.php",
       {
@@ -1391,36 +2178,46 @@ export const categoriesApi = {
           id,
         },
       }
-    );
-
-  },
+    ),
 
 };
 
 
 /* =========================================================
-   PROJECTS
- *
- * /Server/api/client/projects/
- *
- * FULL CRUD + IMAGE
+   PROJECTS API
+   FULL CRUD
 ========================================================= */
 
 export const projectsApi = {
 
+  /*
+   * GET ALL
+   */
   list: async (
     categoryId = ""
   ) => {
+
+    const params = {};
+
+
+    if (
+      categoryId !== "" &&
+      categoryId !== null &&
+      categoryId !== undefined
+    ) {
+
+      params.category_id =
+        categoryId;
+
+    }
+
 
     const res =
       await request(
         "GET",
         "/projects/index.php",
         {
-          params: {
-            category_id:
-              categoryId,
-          },
+          params,
         }
       );
 
@@ -1430,6 +2227,9 @@ export const projectsApi = {
   },
 
 
+  /*
+   * GET ONE
+   */
   getOne: async (
     id
   ) => {
@@ -1454,23 +2254,44 @@ export const projectsApi = {
   /*
    * CREATE
    *
-   * Always use FormData because
-   * a project may contain an image.
+   * If image exists:
+   * multipart/form-data
+   *
+   * Otherwise:
+   * application/json
    */
-
   create: async (
     project
   ) => {
 
-    const formData =
-      createFormData(project);
+    if (
+      containsFile(
+        project?.image
+      )
+    ) {
+
+      const formData =
+        createFormData(
+          project
+        );
 
 
-    return formRequest(
+      return formRequest(
+        "POST",
+        "/projects/index.php",
+        {
+          formData,
+        }
+      );
+
+    }
+
+
+    return request(
       "POST",
       "/projects/index.php",
       {
-        formData,
+        body: project,
       }
     );
 
@@ -1479,14 +2300,58 @@ export const projectsApi = {
 
   /*
    * UPDATE
-   *
-   * POST + _method=PUT
-   *
-   * This allows PHP to receive
-   * multipart/form-data correctly.
    */
-
   update: async (
+    id,
+    project
+  ) => {
+
+    if (
+      containsFile(
+        project?.image
+      )
+    ) {
+
+      const formData =
+        createFormData({
+          ...project,
+
+          id,
+
+          _method: "PUT",
+        });
+
+
+      return formRequest(
+        "POST",
+        "/projects/index.php",
+        {
+          formData,
+        }
+      );
+
+    }
+
+
+    return request(
+      "PUT",
+      "/projects/index.php",
+      {
+        params: {
+          id,
+        },
+
+        body: project,
+      }
+    );
+
+  },
+
+
+  /*
+   * Explicit multipart update.
+   */
+  updateWithImage: async (
     id,
     project
   ) => {
@@ -1513,45 +2378,12 @@ export const projectsApi = {
 
 
   /*
-   * Explicit image update.
-   */
-
-  updateWithImage:
-    async (
-      id,
-      project
-    ) => {
-
-      const formData =
-        createFormData({
-          ...project,
-
-          id,
-
-          _method: "PUT",
-        });
-
-
-      return formRequest(
-        "POST",
-        "/projects/index.php",
-        {
-          formData,
-        }
-      );
-
-    },
-
-
-  /*
    * DELETE
    */
-
-  remove: async (
+  remove: (
     id
-  ) => {
-
-    return request(
+  ) =>
+    request(
       "DELETE",
       "/projects/index.php",
       {
@@ -1559,9 +2391,7 @@ export const projectsApi = {
           id,
         },
       }
-    );
-
-  },
+    ),
 
 };
 
@@ -1572,17 +2402,8 @@ export const projectsApi = {
 
 export const adminApi = {
 
-  /*
-   * Authentication
-   */
-
   auth:
     authApi,
-
-
-  /*
-   * Website content
-   */
 
   siteSettings:
     siteSettingsApi,

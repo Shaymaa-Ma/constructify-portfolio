@@ -1,71 +1,235 @@
+
 <?php
 
 /**
  * /Server/api/admin/services/items/index.php
  *
- * Individual Services
+ * INDIVIDUAL SERVICES API
  *
  * GET:
- *   Returns all services.
+ *   Get all services
+ *
+ * GET ?id=1:
+ *   Get one service
  *
  * PUT / PATCH:
- *   Updates one service.
+ *   Update one service using JSON
  *
- * Services are edit-only.
- * No create/delete.
+ * POST + _method=PUT:
+ *   Update one service using FormData
+ *
+ * Services are EDIT ONLY.
+ * No CREATE.
+ * No DELETE.
  */
 
-require_once __DIR__ . '/../../../_bootstrap.php';
+require_once __DIR__ . '/../../_bootstrap.php';
 
 header("Content-Type: application/json; charset=utf-8");
 
-$method = $_SERVER['REQUEST_METHOD'];
+
+/* =========================================================
+   REQUEST METHOD
+========================================================= */
+
+$method =
+    strtoupper(
+        $_SERVER['REQUEST_METHOD']
+    );
+
+
+/*
+ * Support:
+ *
+ * POST + _method=PUT
+ *
+ * for FormData.
+ */
+
+if (
+    $method === 'POST' &&
+    isset($_POST['_method'])
+) {
+
+    $requestedMethod =
+        strtoupper(
+            trim(
+                (string)$_POST['_method']
+            )
+        );
+
+
+    if (
+        $requestedMethod === 'PUT' ||
+        $requestedMethod === 'PATCH'
+    ) {
+
+        $method =
+            $requestedMethod;
+    }
+}
+
+
+/* =========================================================
+   HELPER
+========================================================= */
+
+function send_json(
+    array $data,
+    int $status = 200
+): void {
+
+    http_response_code($status);
+
+    echo json_encode(
+        $data,
+        JSON_UNESCAPED_SLASHES |
+        JSON_UNESCAPED_UNICODE
+    );
+
+    exit;
+}
 
 
 /* =========================================================
    GET ALL SERVICES
 ========================================================= */
 
-if ($method === 'GET') {
+if (
+    $method === 'GET' &&
+    !isset($_GET['id'])
+) {
 
-    $result = $conn->query("
-        SELECT
-            id,
-            icon,
-            title,
-            description,
-            display_order
-        FROM services
-        ORDER BY display_order ASC, id ASC
-    ");
+    $result =
+        $conn->query("
+            SELECT
+                id,
+                icon,
+                title,
+                description,
+                display_order
+            FROM services
+            ORDER BY
+                display_order ASC,
+                id ASC
+        ");
 
 
     if (!$result) {
 
-        http_response_code(500);
-
-        echo json_encode([
+        send_json([
             "success" => false,
-            "error" => $conn->error
-        ]);
-
-        exit;
+            "error" =>
+                $conn->error
+        ], 500);
     }
 
 
     $services = [];
 
-    while ($row = $result->fetch_assoc()) {
-        $services[] = $row;
+
+    while (
+        $row =
+        $result->fetch_assoc()
+    ) {
+
+        $services[] =
+            $row;
     }
 
 
-    echo json_encode([
+    send_json([
         "success" => true,
-        "data" => $services
+        "data" =>
+            $services
     ]);
+}
 
-    exit;
+
+/* =========================================================
+   GET ONE SERVICE
+========================================================= */
+
+if (
+    $method === 'GET' &&
+    isset($_GET['id'])
+) {
+
+    $id =
+        (int)$_GET['id'];
+
+
+    if (
+        $id <= 0
+    ) {
+
+        send_json([
+            "success" => false,
+            "error" =>
+                "Valid service ID is required."
+        ], 422);
+    }
+
+
+    $stmt =
+        $conn->prepare("
+            SELECT
+                id,
+                icon,
+                title,
+                description,
+                display_order
+            FROM services
+            WHERE id = ?
+            LIMIT 1
+        ");
+
+
+    if (!$stmt) {
+
+        send_json([
+            "success" => false,
+            "error" =>
+                $conn->error
+        ], 500);
+    }
+
+
+    $stmt->bind_param(
+        "i",
+        $id
+    );
+
+
+    $stmt->execute();
+
+
+    $result =
+        $stmt->get_result();
+
+
+    $service =
+        $result->fetch_assoc();
+
+
+    $stmt->close();
+
+
+    if (!$service) {
+
+        send_json([
+            "success" => false,
+            "error" =>
+                "Service not found."
+        ], 404);
+    }
+
+
+    send_json([
+        "success" => true,
+        "data" =>
+            $service
+    ]);
 }
 
 
@@ -73,164 +237,236 @@ if ($method === 'GET') {
    UPDATE SERVICE
 ========================================================= */
 
-if ($method === 'PUT' || $method === 'PATCH') {
+if (
+    $method === 'PUT' ||
+    $method === 'PATCH'
+) {
 
     require_auth();
 
 
-    /* -----------------------------------------------------
-       Read JSON
-    ----------------------------------------------------- */
+    /* =====================================================
+       READ INPUT
+    ===================================================== */
 
-    $input = json_decode(
-        file_get_contents("php://input"),
-        true
-    );
+    $contentType =
+        $_SERVER['CONTENT_TYPE'] ??
+        $_SERVER['HTTP_CONTENT_TYPE'] ??
+        '';
 
 
-    if (!is_array($input)) {
+    $input = [];
 
-        http_response_code(400);
 
-        echo json_encode([
-            "success" => false,
-            "error" => "Invalid JSON."
-        ]);
+    if (
+        stripos(
+            $contentType,
+            'multipart/form-data'
+        ) !== false
+    ) {
 
-        exit;
+        $input =
+            $_POST;
+
+    } else {
+
+        $rawBody =
+            file_get_contents(
+                "php://input"
+            );
+
+
+        if (
+            $rawBody !== false &&
+            trim($rawBody) !== ''
+        ) {
+
+            $decoded =
+                json_decode(
+                    $rawBody,
+                    true
+                );
+
+
+            if (
+                is_array($decoded)
+            ) {
+
+                $input =
+                    $decoded;
+            }
+        }
     }
 
+
+    /* =====================================================
+       SERVICE ID
+    ===================================================== */
 
     $id =
-        (int)($input['id'] ?? 0);
+        isset($_GET['id'])
+            ? (int)$_GET['id']
+            : (int)($input['id'] ?? 0);
 
 
-    if ($id <= 0) {
+    if (
+        $id <= 0
+    ) {
 
-        http_response_code(422);
-
-        echo json_encode([
+        send_json([
             "success" => false,
-            "error" => "Valid service ID is required."
-        ]);
-
-        exit;
+            "error" =>
+                "Valid service ID is required."
+        ], 422);
     }
 
 
-    /* -----------------------------------------------------
-       Check service exists
-    ----------------------------------------------------- */
+    /* =====================================================
+       GET EXISTING SERVICE
+    ===================================================== */
 
-    $checkStmt = $conn->prepare("
-        SELECT id
-        FROM services
-        WHERE id = ?
-        LIMIT 1
-    ");
+    $existingStmt =
+        $conn->prepare("
+            SELECT
+                id,
+                icon,
+                title,
+                description,
+                display_order
+            FROM services
+            WHERE id = ?
+            LIMIT 1
+        ");
 
 
-    if (!$checkStmt) {
+    if (!$existingStmt) {
 
-        http_response_code(500);
-
-        echo json_encode([
+        send_json([
             "success" => false,
-            "error" => $conn->error
-        ]);
-
-        exit;
+            "error" =>
+                $conn->error
+        ], 500);
     }
 
 
-    $checkStmt->bind_param(
+    $existingStmt->bind_param(
         "i",
         $id
     );
 
-    $checkStmt->execute();
 
-    $checkResult =
-        $checkStmt->get_result();
+    $existingStmt->execute();
 
 
-    if (!$checkResult->fetch_assoc()) {
+    $existingResult =
+        $existingStmt->get_result();
 
-        $checkStmt->close();
 
-        http_response_code(404);
+    $existing =
+        $existingResult->fetch_assoc();
 
-        echo json_encode([
+
+    $existingStmt->close();
+
+
+    if (!$existing) {
+
+        send_json([
             "success" => false,
-            "error" => "Service not found."
-        ]);
-
-        exit;
+            "error" =>
+                "Service not found."
+        ], 404);
     }
 
 
-    $checkStmt->close();
-
-
-    /* -----------------------------------------------------
-       Service fields
-    ----------------------------------------------------- */
+    /* =====================================================
+       SERVICE FIELDS
+    ===================================================== */
 
     $icon =
-        trim($input['icon'] ?? '');
+        array_key_exists(
+            'icon',
+            $input
+        )
+            ? trim(
+                (string)$input['icon']
+            )
+            : ($existing['icon'] ?? '');
+
 
     $title =
-        trim($input['title'] ?? '');
+        array_key_exists(
+            'title',
+            $input
+        )
+            ? trim(
+                (string)$input['title']
+            )
+            : ($existing['title'] ?? '');
+
 
     $description =
-        trim($input['description'] ?? '');
+        array_key_exists(
+            'description',
+            $input
+        )
+            ? trim(
+                (string)$input['description']
+            )
+            : ($existing['description'] ?? '');
+
 
     $displayOrder =
-        (int)($input['display_order'] ?? 0);
+        array_key_exists(
+            'display_order',
+            $input
+        )
+            ? (int)$input['display_order']
+            : (int)(
+                $existing['display_order']
+                ?? 0
+            );
 
 
-    /* -----------------------------------------------------
-       Validate title
-    ----------------------------------------------------- */
+    /* =====================================================
+       VALIDATION
+    ===================================================== */
 
-    if ($title === '') {
+    if (
+        $title === ''
+    ) {
 
-        http_response_code(422);
-
-        echo json_encode([
+        send_json([
             "success" => false,
-            "error" => "Service title is required."
-        ]);
-
-        exit;
+            "error" =>
+                "Service title is required."
+        ], 422);
     }
 
 
-    /* -----------------------------------------------------
-       Update service
-    ----------------------------------------------------- */
+    /* =====================================================
+       UPDATE
+    ===================================================== */
 
-    $stmt = $conn->prepare("
-        UPDATE services
-        SET
-            icon = ?,
-            title = ?,
-            description = ?,
-            display_order = ?
-        WHERE id = ?
-    ");
+    $stmt =
+        $conn->prepare("
+            UPDATE services
+            SET
+                icon = ?,
+                title = ?,
+                description = ?,
+                display_order = ?
+            WHERE id = ?
+        ");
 
 
     if (!$stmt) {
 
-        http_response_code(500);
-
-        echo json_encode([
+        send_json([
             "success" => false,
-            "error" => $conn->error
-        ]);
-
-        exit;
+            "error" =>
+                $conn->error
+        ], 500);
     }
 
 
@@ -244,28 +480,83 @@ if ($method === 'PUT' || $method === 'PATCH') {
     );
 
 
-    if (!$stmt->execute()) {
+    if (
+        !$stmt->execute()
+    ) {
 
-        http_response_code(500);
+        $error =
+            $stmt->error;
 
-        echo json_encode([
+
+        $stmt->close();
+
+
+        send_json([
             "success" => false,
-            "error" => $stmt->error
-        ]);
-
-        exit;
+            "error" =>
+                $error
+        ], 500);
     }
 
 
     $stmt->close();
 
 
-    echo json_encode([
-        "success" => true,
-        "message" => "Service updated successfully."
-    ]);
+    /* =====================================================
+       GET UPDATED SERVICE
+    ===================================================== */
 
-    exit;
+    $updatedStmt =
+        $conn->prepare("
+            SELECT
+                id,
+                icon,
+                title,
+                description,
+                display_order
+            FROM services
+            WHERE id = ?
+            LIMIT 1
+        ");
+
+
+    if (!$updatedStmt) {
+
+        send_json([
+            "success" => false,
+            "error" =>
+                $conn->error
+        ], 500);
+    }
+
+
+    $updatedStmt->bind_param(
+        "i",
+        $id
+    );
+
+
+    $updatedStmt->execute();
+
+
+    $updatedResult =
+        $updatedStmt->get_result();
+
+
+    $updatedService =
+        $updatedResult->fetch_assoc();
+
+
+    $updatedStmt->close();
+
+
+    send_json([
+        "success" => true,
+        "message" =>
+            "Service updated successfully.",
+        "data" =>
+            $updatedService
+    ]);
 }
 
 
@@ -273,9 +564,8 @@ if ($method === 'PUT' || $method === 'PATCH') {
    METHOD NOT ALLOWED
 ========================================================= */
 
-http_response_code(405);
-
-echo json_encode([
+send_json([
     "success" => false,
-    "error" => "Only GET and PUT/PATCH are allowed."
-]);
+    "error" =>
+        "Method not allowed."
+], 405);

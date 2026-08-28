@@ -75,7 +75,7 @@ export default function App() {
               element={<ProjectCategories />}
             />
 
-            
+
 
           </Route>
 
@@ -84,7 +84,7 @@ export default function App() {
         {/* Fallback */}
         <Route
           path="*"
-          element={<Navigate to="/admin/dashboard" replace />}
+          element={<Navigate to="/admin/login" replace />}
         />
 
       </Routes>

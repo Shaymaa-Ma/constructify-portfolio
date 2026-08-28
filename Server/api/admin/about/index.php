@@ -6,334 +6,33 @@
  * About Section Admin API
  *
  * GET
- *   Returns the About section.
+ *   Returns About section.
  *
  * POST
- *   Updates About section content.
- *   Supports image uploads using multipart/form-data.
+ *   Updates About section.
+ *   Supports image_primary and image_secondary uploads.
  *
- * Images:
- *   image_primary
- *   image_secondary
+ * Authentication:
+ *   require_admin()
  */
 
-require_once __DIR__ . '/../../_bootstrap.php';
-
-header("Content-Type: application/json; charset=utf-8");
-
-$method = $_SERVER['REQUEST_METHOD'];
+require_once __DIR__ . '/../_bootstrap.php';
 
 
 /* =========================================================
-   UPLOAD DIRECTORY
+   UPLOAD CONFIGURATION
 ========================================================= */
 
-/*
- * Project structure:
- *
- * construction-portfolio/
- * ├── Server/
- * │   └── api/
- * │       └── admin/
- * │           └── about/
- * │               └── index.php
- * │
- * └── uploads/
- *
- * From:
- * Server/api/admin/about/
- *
- * ../../../.. = construction-portfolio/
- */
+$uploadDir = __DIR__ . '/../../../../uploads/';
 
-$uploadDir = __DIR__ . '/../../../uploads/';
+$uploadUrl = '/construction-portfolio/uploads/';
 
 
 /* =========================================================
-   HELPER: JSON RESPONSE
+   REQUEST METHOD
 ========================================================= */
 
-function json_response(array $data, int $status = 200): void
-{
-    http_response_code($status);
-
-    echo json_encode(
-        $data,
-        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
-    );
-
-    exit;
-}
-
-
-/* =========================================================
-   HELPER: DELETE OLD IMAGE
-========================================================= */
-
-function delete_old_image(
-    ?string $image,
-    string $uploadDir
-): void {
-
-    if (!$image) {
-        return;
-    }
-
-    /*
-     * If the database contains:
-     *
-     * image.jpg
-     *
-     * or:
-     *
-     * /uploads/image.jpg
-     *
-     * or:
-     *
-     * http://localhost/.../uploads/image.jpg
-     *
-     * basename() safely extracts only the filename.
-     */
-
-    $path = parse_url(
-        $image,
-        PHP_URL_PATH
-    );
-
-    $filename = basename(
-        $path ?: $image
-    );
-
-    if (!$filename) {
-        return;
-    }
-
-
-    /* -------------------------------------------------------
-       Allowed extensions
-    ------------------------------------------------------- */
-
-    $allowedExtensions = [
-        'jpg',
-        'jpeg',
-        'png',
-        'webp',
-        'gif'
-    ];
-
-
-    $extension = strtolower(
-        pathinfo(
-            $filename,
-            PATHINFO_EXTENSION
-        )
-    );
-
-
-    if (
-        !in_array(
-            $extension,
-            $allowedExtensions,
-            true
-        )
-    ) {
-        return;
-    }
-
-
-    /* -------------------------------------------------------
-       Build file path
-    ------------------------------------------------------- */
-
-    $filePath =
-        rtrim(
-            $uploadDir,
-            '/\\'
-        )
-        . DIRECTORY_SEPARATOR
-        . $filename;
-
-
-    if (is_file($filePath)) {
-        @unlink($filePath);
-    }
-}
-
-
-/* =========================================================
-   HELPER: UPLOAD IMAGE
-========================================================= */
-
-function upload_image(
-    string $fieldName,
-    string $uploadDir,
-    string $prefix
-): ?string {
-
-    /*
-     * No new image selected.
-     *
-     * Returning null means:
-     * keep the existing database image.
-     */
-
-    if (
-        !isset($_FILES[$fieldName]) ||
-        $_FILES[$fieldName]['error'] === UPLOAD_ERR_NO_FILE
-    ) {
-        return null;
-    }
-
-
-    $file = $_FILES[$fieldName];
-
-
-    /* -------------------------------------------------------
-       Upload error
-    ------------------------------------------------------- */
-
-    if (
-        $file['error'] !== UPLOAD_ERR_OK
-    ) {
-
-        throw new Exception(
-            "Image upload failed for {$fieldName}."
-        );
-    }
-
-
-    /* -------------------------------------------------------
-       File size
-       Maximum: 5 MB
-    ------------------------------------------------------- */
-
-    $maxFileSize =
-        5 * 1024 * 1024;
-
-
-    if (
-        $file['size'] > $maxFileSize
-    ) {
-
-        throw new Exception(
-            "The {$fieldName} image must be smaller than 5 MB."
-        );
-    }
-
-
-    /* -------------------------------------------------------
-       Validate MIME type
-    ------------------------------------------------------- */
-
-    $finfo = finfo_open(
-        FILEINFO_MIME_TYPE
-    );
-
-
-    if (!$finfo) {
-
-        throw new Exception(
-            "Unable to validate uploaded image."
-        );
-    }
-
-
-    $mimeType = finfo_file(
-        $finfo,
-        $file['tmp_name']
-    );
-
-
-    finfo_close($finfo);
-
-
-    $allowedMimeTypes = [
-        'image/jpeg' => 'jpg',
-        'image/png'  => 'png',
-        'image/webp' => 'webp',
-        'image/gif'  => 'gif'
-    ];
-
-
-    if (
-        !isset(
-            $allowedMimeTypes[$mimeType]
-        )
-    ) {
-
-        throw new Exception(
-            "Invalid image type for {$fieldName}. Allowed: JPG, PNG, WEBP, GIF."
-        );
-    }
-
-
-    /* -------------------------------------------------------
-       Make sure upload directory exists
-    ------------------------------------------------------- */
-
-    if (!is_dir($uploadDir)) {
-
-        if (
-            !mkdir(
-                $uploadDir,
-                0755,
-                true
-            )
-        ) {
-
-            throw new Exception(
-                "Unable to create uploads directory."
-            );
-        }
-    }
-
-
-    /* -------------------------------------------------------
-       Generate unique filename
-    ------------------------------------------------------- */
-
-    $extension =
-        $allowedMimeTypes[$mimeType];
-
-
-    $filename =
-        $prefix
-        . '_'
-        . bin2hex(
-            random_bytes(8)
-        )
-        . '.'
-        . $extension;
-
-
-    $destination =
-        rtrim(
-            $uploadDir,
-            '/\\'
-        )
-        . DIRECTORY_SEPARATOR
-        . $filename;
-
-
-    /* -------------------------------------------------------
-       Move uploaded file
-    ------------------------------------------------------- */
-
-    if (
-        !move_uploaded_file(
-            $file['tmp_name'],
-            $destination
-        )
-    ) {
-
-        throw new Exception(
-            "Unable to save uploaded {$fieldName} image."
-        );
-    }
-
-
-    return $filename;
-}
+$method = request_method();
 
 
 /* =========================================================
@@ -349,31 +48,26 @@ if ($method === 'GET') {
         LIMIT 1
     ");
 
-
     if (!$result) {
 
-        json_response([
-            "success" => false,
-            "error" => $conn->error
-        ], 500);
+        database_error(
+            $conn,
+            'Unable to load About section.'
+        );
     }
-
 
     $about = $result->fetch_assoc();
 
-
     if (!$about) {
 
-        json_response([
-            "success" => false,
-            "error" => "About section not found."
-        ], 404);
+        admin_error(
+            'About section not found.',
+            404
+        );
     }
 
-
-    json_response([
-        "success" => true,
-        "data" => $about
+    admin_success([
+        'data' => $about
     ]);
 }
 
@@ -385,197 +79,448 @@ if ($method === 'GET') {
 if ($method === 'POST') {
 
     /*
-     * Only authenticated admins can update About.
+     * Require authenticated admin.
      */
+    $admin = require_admin();
 
-    require_auth();
 
-
-    /* =======================================================
+    /* =====================================================
        ABOUT ID
-    ======================================================= */
+    ===================================================== */
 
-    $id = (int)(
-        $_POST['id'] ?? 1
+    $id = integer_value(
+        $_POST['id'] ?? 1,
+        'id',
+        1
     );
 
 
-    if ($id <= 0) {
-
-        json_response([
-            "success" => false,
-            "error" => "Valid About ID is required."
-        ], 422);
-    }
-
-
-    /* =======================================================
+    /* =====================================================
        GET EXISTING ABOUT
-    ======================================================= */
+    ===================================================== */
 
-    $existingStmt = $conn->prepare("
+    $aboutStmt = $conn->prepare("
         SELECT *
         FROM about_section
         WHERE id = ?
         LIMIT 1
     ");
 
+    if (!$aboutStmt) {
 
-    if (!$existingStmt) {
-
-        json_response([
-            "success" => false,
-            "error" => $conn->error
-        ], 500);
+        database_error(
+            $conn,
+            'Unable to prepare About query.'
+        );
     }
 
-
-    $existingStmt->bind_param(
-        "i",
+    $aboutStmt->bind_param(
+        'i',
         $id
     );
 
+    if (!$aboutStmt->execute()) {
 
-    $existingStmt->execute();
+        $aboutStmt->close();
 
+        database_error(
+            $conn,
+            'Unable to load About section.'
+        );
+    }
 
-    $existingResult =
-        $existingStmt->get_result();
-
+    $aboutResult =
+        $aboutStmt->get_result();
 
     $existingAbout =
-        $existingResult->fetch_assoc();
+        $aboutResult->fetch_assoc();
 
-
-    $existingStmt->close();
+    $aboutStmt->close();
 
 
     if (!$existingAbout) {
 
-        json_response([
-            "success" => false,
-            "error" => "About section not found."
-        ], 404);
+        admin_error(
+            'About section not found.',
+            404
+        );
     }
 
 
-    /* =======================================================
-       TEXT FIELDS
-    ======================================================= */
+    /* =====================================================
+       ABOUT FIELDS
+    ===================================================== */
 
-    $badge_text = trim(
-        $_POST['badge_text'] ?? ''
-    );
+    $badge_text =
+        string_value(
+            $_POST['badge_text'] ?? '',
+            'badge_text',
+            255
+        );
+
+    $title =
+        string_value(
+            $_POST['title'] ?? '',
+            'title',
+            500
+        );
+
+    $description =
+        string_value(
+            $_POST['description'] ?? '',
+            'description',
+            5000
+        );
+
+    $overlay_badge_text =
+        string_value(
+            $_POST['overlay_badge_text'] ?? '',
+            'overlay_badge_text',
+            255
+        );
+
+    $primary_btn_text =
+        string_value(
+            $_POST['primary_btn_text'] ?? '',
+            'primary_btn_text',
+            255
+        );
+
+    $primary_btn_link =
+        string_value(
+            $_POST['primary_btn_link'] ?? '',
+            'primary_btn_link',
+            1000
+        );
+
+    $secondary_btn_text =
+        string_value(
+            $_POST['secondary_btn_text'] ?? '',
+            'secondary_btn_text',
+            255
+        );
+
+    $secondary_btn_link =
+        string_value(
+            $_POST['secondary_btn_link'] ?? '',
+            'secondary_btn_link',
+            1000
+        );
 
 
-    $title = trim(
-        $_POST['title'] ?? ''
-    );
-
-
-    $description = trim(
-        $_POST['description'] ?? ''
-    );
-
-
-    $overlay_badge_text = trim(
-        $_POST['overlay_badge_text'] ?? ''
-    );
-
-
-    $primary_btn_text = trim(
-        $_POST['primary_btn_text'] ?? ''
-    );
-
-
-    $primary_btn_link = trim(
-        $_POST['primary_btn_link'] ?? ''
-    );
-
-
-    $secondary_btn_text = trim(
-        $_POST['secondary_btn_text'] ?? ''
-    );
-
-
-    $secondary_btn_link = trim(
-        $_POST['secondary_btn_link'] ?? ''
-    );
-
-
-    /* =======================================================
-       EXISTING IMAGES
-    ======================================================= */
+    /* =====================================================
+       CURRENT IMAGES
+    ===================================================== */
 
     $image_primary =
         $existingAbout['image_primary'] ?? '';
-
 
     $image_secondary =
         $existingAbout['image_secondary'] ?? '';
 
 
-    /*
-     * Track newly uploaded files so they can be deleted
-     * if the database update fails.
-     */
+    $newPrimaryUploaded = false;
+    $newSecondaryUploaded = false;
 
-    $newPrimaryImage = null;
-    $newSecondaryImage = null;
+    $newPrimaryFilename = null;
+    $newSecondaryFilename = null;
 
 
-    /* =======================================================
-       START
-    ======================================================= */
+    /* =====================================================
+       IMAGE UPLOAD HELPER
+    ===================================================== */
+
+    $uploadImage = function (
+        string $fieldName,
+        string $defaultName
+    ) use (
+        $uploadDir
+    ) {
+
+        if (
+            !isset($_FILES[$fieldName]) ||
+            $_FILES[$fieldName]['error'] === UPLOAD_ERR_NO_FILE
+        ) {
+
+            return null;
+        }
+
+
+        $file = $_FILES[$fieldName];
+
+
+        /* -------------------------------------------------
+           Upload Error
+        ------------------------------------------------- */
+
+        if (
+            $file['error'] !== UPLOAD_ERR_OK
+        ) {
+
+            admin_error(
+                "Image upload failed for {$fieldName}.",
+                400
+            );
+        }
+
+
+        /* -------------------------------------------------
+           File Size
+        ------------------------------------------------- */
+
+        $maxFileSize =
+            5 * 1024 * 1024;
+
+        if (
+            $file['size'] > $maxFileSize
+        ) {
+
+            admin_error(
+                "{$fieldName} must be smaller than 5 MB.",
+                422
+            );
+        }
+
+
+        /* -------------------------------------------------
+           MIME Validation
+        ------------------------------------------------- */
+
+        $finfo =
+            finfo_open(
+                FILEINFO_MIME_TYPE
+            );
+
+        if (!$finfo) {
+
+            admin_error(
+                'Unable to validate uploaded image.',
+                500
+            );
+        }
+
+        $mimeType =
+            finfo_file(
+                $finfo,
+                $file['tmp_name']
+            );
+
+        finfo_close($finfo);
+
+
+        $allowedMimeTypes = [
+
+            'image/jpeg' => 'jpg',
+
+            'image/png' => 'png',
+
+            'image/webp' => 'webp',
+
+            'image/gif' => 'gif',
+
+        ];
+
+
+        if (
+            !isset(
+                $allowedMimeTypes[$mimeType]
+            )
+        ) {
+
+            admin_error(
+                'Invalid image type. Allowed: JPG, PNG, WEBP, GIF.',
+                422
+            );
+        }
+
+
+        /* -------------------------------------------------
+           Make Upload Directory
+        ------------------------------------------------- */
+
+        if (!is_dir($uploadDir)) {
+
+            if (
+                !mkdir(
+                    $uploadDir,
+                    0755,
+                    true
+                )
+            ) {
+
+                admin_error(
+                    'Unable to create uploads directory.',
+                    500
+                );
+            }
+        }
+
+
+        if (!is_writable($uploadDir)) {
+
+            admin_error(
+                'Uploads directory is not writable.',
+                500
+            );
+        }
+
+
+        /* -------------------------------------------------
+           Generate Filename
+        ------------------------------------------------- */
+
+        $extension =
+            $allowedMimeTypes[$mimeType];
+
+
+        $originalName =
+            pathinfo(
+                $file['name'],
+                PATHINFO_FILENAME
+            );
+
+
+        $safeName =
+            preg_replace(
+                '/[^A-Za-z0-9_\-]+/',
+                '-',
+                $originalName
+            );
+
+
+        $safeName =
+            trim(
+                $safeName,
+                '-'
+            );
+
+
+        if ($safeName === '') {
+
+            $safeName =
+                $defaultName;
+        }
+
+
+        $filename =
+            $safeName .
+            '.' .
+            $extension;
+
+
+        $destination =
+            rtrim(
+                $uploadDir,
+                '/\\'
+            ) .
+            DIRECTORY_SEPARATOR .
+            $filename;
+
+
+        $suffix = 1;
+
+
+        while (
+            is_file($destination)
+        ) {
+
+            $filename =
+                $safeName .
+                '-' .
+                $suffix .
+                '.' .
+                $extension;
+
+
+            $destination =
+                rtrim(
+                    $uploadDir,
+                    '/\\'
+                ) .
+                DIRECTORY_SEPARATOR .
+                $filename;
+
+
+            $suffix++;
+        }
+
+
+        /* -------------------------------------------------
+           Move File
+        ------------------------------------------------- */
+
+        if (
+            !move_uploaded_file(
+                $file['tmp_name'],
+                $destination
+            )
+        ) {
+
+            admin_error(
+                "Unable to save {$fieldName} image.",
+                500
+            );
+        }
+
+
+        return $filename;
+    };
+
+
+    /* =====================================================
+       PRIMARY IMAGE
+    ===================================================== */
+
+    $newPrimaryFilename =
+        $uploadImage(
+            'image_primary',
+            'about-primary'
+        );
+
+
+    if (
+        $newPrimaryFilename !== null
+    ) {
+
+        $image_primary =
+            $newPrimaryFilename;
+
+        $newPrimaryUploaded =
+            true;
+    }
+
+
+    /* =====================================================
+       SECONDARY IMAGE
+    ===================================================== */
+
+    $newSecondaryFilename =
+        $uploadImage(
+            'image_secondary',
+            'about-secondary'
+        );
+
+
+    if (
+        $newSecondaryFilename !== null
+    ) {
+
+        $image_secondary =
+            $newSecondaryFilename;
+
+        $newSecondaryUploaded =
+            true;
+    }
+
+
+    /* =====================================================
+       DATABASE TRANSACTION
+    ===================================================== */
+
+    $conn->begin_transaction();
+
 
     try {
-
-        /* =====================================================
-           UPLOAD PRIMARY IMAGE
-        ===================================================== */
-
-        $newPrimaryImage = upload_image(
-            'image_primary',
-            $uploadDir,
-            'about_primary'
-        );
-
-
-        if ($newPrimaryImage !== null) {
-
-            $image_primary =
-                $newPrimaryImage;
-        }
-
-
-        /* =====================================================
-           UPLOAD SECONDARY IMAGE
-        ===================================================== */
-
-        $newSecondaryImage = upload_image(
-            'image_secondary',
-            $uploadDir,
-            'about_secondary'
-        );
-
-
-        if ($newSecondaryImage !== null) {
-
-            $image_secondary =
-                $newSecondaryImage;
-        }
-
-
-        /* =====================================================
-           DATABASE TRANSACTION
-        ===================================================== */
-
-        $conn->begin_transaction();
-
-
-        /* =====================================================
-           UPDATE ABOUT
-        ===================================================== */
 
         $stmt = $conn->prepare("
             UPDATE about_section
@@ -597,13 +542,13 @@ if ($method === 'POST') {
         if (!$stmt) {
 
             throw new Exception(
-                $conn->error
+                'Unable to prepare About update.'
             );
         }
 
 
         $stmt->bind_param(
-            "ssssssssssi",
+            'ssssssssssi',
             $badge_text,
             $title,
             $description,
@@ -620,8 +565,10 @@ if ($method === 'POST') {
 
         if (!$stmt->execute()) {
 
+            $stmt->close();
+
             throw new Exception(
-                $stmt->error
+                'Unable to update About section.'
             );
         }
 
@@ -629,72 +576,197 @@ if ($method === 'POST') {
         $stmt->close();
 
 
-        /* =====================================================
+        /* =================================================
            COMMIT
-        ===================================================== */
+        ================================================= */
 
         $conn->commit();
 
 
-        /* =====================================================
-           DELETE OLD PRIMARY IMAGE
-        ===================================================== */
+    } catch (
+        Throwable $e
+    ) {
+
+        $conn->rollback();
+
+
+        /* -----------------------------------------------
+           Delete newly uploaded primary image
+        ----------------------------------------------- */
 
         if (
-            $newPrimaryImage !== null &&
-            !empty(
-                $existingAbout['image_primary']
-            ) &&
-            $existingAbout['image_primary']
-                !== $image_primary
+            $newPrimaryUploaded &&
+            $newPrimaryFilename
         ) {
+
+            $newPath =
+                rtrim(
+                    $uploadDir,
+                    '/\\'
+                ) .
+                DIRECTORY_SEPARATOR .
+                $newPrimaryFilename;
+
+
+            if (
+                is_file($newPath)
+            ) {
+
+                @unlink(
+                    $newPath
+                );
+            }
+        }
+
+
+        /* -----------------------------------------------
+           Delete newly uploaded secondary image
+        ----------------------------------------------- */
+
+        if (
+            $newSecondaryUploaded &&
+            $newSecondaryFilename
+        ) {
+
+            $newPath =
+                rtrim(
+                    $uploadDir,
+                    '/\\'
+                ) .
+                DIRECTORY_SEPARATOR .
+                $newSecondaryFilename;
+
+
+            if (
+                is_file($newPath)
+            ) {
+
+                @unlink(
+                    $newPath
+                );
+            }
+        }
+
+
+        error_log(
+            'About update error: ' .
+            $e->getMessage()
+        );
+
+
+        admin_error(
+            'Unable to update About section.',
+            500
+        );
+    }
+
+
+    /* =====================================================
+       DELETE OLD PRIMARY IMAGE
+    ===================================================== */
+
+    if (
+        $newPrimaryUploaded &&
+        !empty(
+            $existingAbout['image_primary']
+        ) &&
+        $existingAbout['image_primary']
+            !== $image_primary
+    ) {
+
+        try {
 
             delete_old_image(
                 $existingAbout['image_primary'],
                 $uploadDir
             );
-        }
 
-
-        /* =====================================================
-           DELETE OLD SECONDARY IMAGE
-        ===================================================== */
-
-        if (
-            $newSecondaryImage !== null &&
-            !empty(
-                $existingAbout['image_secondary']
-            ) &&
-            $existingAbout['image_secondary']
-                !== $image_secondary
+        } catch (
+            Throwable $e
         ) {
+
+            error_log(
+                'About primary image cleanup warning: ' .
+                $e->getMessage()
+            );
+        }
+    }
+
+
+    /* =====================================================
+       DELETE OLD SECONDARY IMAGE
+    ===================================================== */
+
+    if (
+        $newSecondaryUploaded &&
+        !empty(
+            $existingAbout['image_secondary']
+        ) &&
+        $existingAbout['image_secondary']
+            !== $image_secondary
+    ) {
+
+        try {
 
             delete_old_image(
                 $existingAbout['image_secondary'],
                 $uploadDir
             );
+
+        } catch (
+            Throwable $e
+        ) {
+
+            error_log(
+                'About secondary image cleanup warning: ' .
+                $e->getMessage()
+            );
+        }
+    }
+
+
+    /* =====================================================
+       GET UPDATED ABOUT
+    ===================================================== */
+
+    $updatedAbout = null;
+
+
+    try {
+
+        $updatedStmt =
+            $conn->prepare("
+                SELECT *
+                FROM about_section
+                WHERE id = ?
+                LIMIT 1
+            ");
+
+
+        if (!$updatedStmt) {
+
+            throw new Exception(
+                'Unable to prepare updated About query.'
+            );
         }
 
 
-        /* =====================================================
-           GET UPDATED ABOUT
-        ===================================================== */
-
-        $updatedStmt = $conn->prepare("
-            SELECT *
-            FROM about_section
-            WHERE id = ?
-            LIMIT 1
-        ");
-
-
         $updatedStmt->bind_param(
-            "i",
+            'i',
             $id
         );
 
 
-        $updatedStmt->execute();
+        if (
+            !$updatedStmt->execute()
+        ) {
+
+            $updatedStmt->close();
+
+            throw new Exception(
+                'Unable to load updated About.'
+            );
+        }
 
 
         $updatedResult =
@@ -708,80 +780,68 @@ if ($method === 'POST') {
         $updatedStmt->close();
 
 
-        /* =====================================================
-           SUCCESS
-        ===================================================== */
+    } catch (
+        Throwable $e
+    ) {
 
-        json_response([
-            "success" => true,
-            "message" =>
-                "About section updated successfully.",
-            "data" => $updatedAbout
-        ]);
+        error_log(
+            'About post-update fetch warning: ' .
+            $e->getMessage()
+        );
 
 
-    } catch (Exception $e) {
+        $updatedAbout =
+            array_merge(
+                $existingAbout,
+                [
+                    'id' =>
+                        $id,
 
-        /* =====================================================
-           ROLLBACK
-        ===================================================== */
+                    'badge_text' =>
+                        $badge_text,
 
-        if (
-            $conn->errno ||
-            $conn->in_transaction
-        ) {
+                    'title' =>
+                        $title,
 
-            $conn->rollback();
-        }
+                    'description' =>
+                        $description,
 
+                    'overlay_badge_text' =>
+                        $overlay_badge_text,
 
-        /* =====================================================
-           DELETE NEW PRIMARY IMAGE
-        ===================================================== */
+                    'image_primary' =>
+                        $image_primary,
 
-        if ($newPrimaryImage) {
+                    'image_secondary' =>
+                        $image_secondary,
 
-            $newPath =
-                rtrim(
-                    $uploadDir,
-                    '/\\'
-                )
-                . DIRECTORY_SEPARATOR
-                . $newPrimaryImage;
+                    'primary_btn_text' =>
+                        $primary_btn_text,
 
+                    'primary_btn_link' =>
+                        $primary_btn_link,
 
-            if (is_file($newPath)) {
-                @unlink($newPath);
-            }
-        }
+                    'secondary_btn_text' =>
+                        $secondary_btn_text,
 
-
-        /* =====================================================
-           DELETE NEW SECONDARY IMAGE
-        ===================================================== */
-
-        if ($newSecondaryImage) {
-
-            $newPath =
-                rtrim(
-                    $uploadDir,
-                    '/\\'
-                )
-                . DIRECTORY_SEPARATOR
-                . $newSecondaryImage;
-
-
-            if (is_file($newPath)) {
-                @unlink($newPath);
-            }
-        }
-
-
-        json_response([
-            "success" => false,
-            "error" => $e->getMessage()
-        ], 500);
+                    'secondary_btn_link' =>
+                        $secondary_btn_link,
+                ]
+            );
     }
+
+
+    /* =====================================================
+       SUCCESS
+    ===================================================== */
+
+    admin_success([
+        'message' =>
+            'About section updated successfully.',
+
+        'data' =>
+            $updatedAbout
+    ]);
 }
 
 
@@ -789,7 +849,11 @@ if ($method === 'POST') {
    METHOD NOT ALLOWED
 ========================================================= */
 
-json_response([
-    "success" => false,
-    "error" => "Method not allowed."
-], 405);
+header(
+    'Allow: GET, POST'
+);
+
+admin_error(
+    'Method not allowed.',
+    405
+);

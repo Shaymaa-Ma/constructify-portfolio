@@ -168,10 +168,11 @@ export default function SiteSettings() {
 
       {/* SETTINGS FORM */}
       <form
-        className="content-card form-card"
-        onSubmit={handleSave}
-        style={{ maxWidth: 760 }}
-      >
+  className="content-card form-card site-settings-card"
+  onSubmit={handleSave}
+>
+
+
         {/* CARD HEADER */}
         <div className="card-heading">
           <div>

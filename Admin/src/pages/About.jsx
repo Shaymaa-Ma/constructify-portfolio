@@ -1,35 +1,57 @@
 
 import React, { useEffect, useState } from "react";
-import { aboutApi } from "../api/adminApi";
-
-const IMAGE_BASE =
-  import.meta.env?.VITE_UPLOADS_BASE_URL || "/uploads";
+import { aboutApi, getImageUrl } from "../api/adminApi";
 
 export default function About() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  /* =========================================================
+     ABOUT FORM
+  ========================================================= */
+
   const [form, setForm] = useState({
+    id: null,
+
     badge_text: "",
     title: "",
     description: "",
     overlay_badge_text: "",
+
     primary_btn_text: "",
     primary_btn_link: "",
+
     secondary_btn_text: "",
     secondary_btn_link: "",
   });
 
+  /* =========================================================
+     CURRENT IMAGES
+  ========================================================= */
+
   const [currentPrimary, setCurrentPrimary] = useState(null);
   const [currentSecondary, setCurrentSecondary] = useState(null);
+
+  /* =========================================================
+     NEW IMAGE FILES
+  ========================================================= */
 
   const [newPrimary, setNewPrimary] = useState(null);
   const [newSecondary, setNewSecondary] = useState(null);
 
+  /* =========================================================
+     IMAGE PREVIEWS
+  ========================================================= */
+
   const [previewPrimary, setPreviewPrimary] = useState(null);
   const [previewSecondary, setPreviewSecondary] = useState(null);
+
+  /* =========================================================
+     FEATURES
+  ========================================================= */
 
   const [features, setFeatures] = useState([]);
   const [featureSaving, setFeatureSaving] = useState(null);
@@ -40,6 +62,18 @@ export default function About() {
 
   useEffect(() => {
     loadAbout();
+
+    return () => {
+      if (previewPrimary) {
+        URL.revokeObjectURL(previewPrimary);
+      }
+
+      if (previewSecondary) {
+        URL.revokeObjectURL(previewSecondary);
+      }
+    };
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadAbout() {
@@ -47,29 +81,61 @@ export default function About() {
     setError("");
 
     try {
+      /* =====================================================
+         LOAD ABOUT SECTION
+      ===================================================== */
+
       const response = await aboutApi.get();
 
-      const section =
-        response?.section ||
-        response?.data ||
-        response ||
-        {};
+      /*
+       * PHP returns:
+       *
+       * {
+       *   success: true,
+       *   data: {
+       *      id,
+       *      badge_text,
+       *      title,
+       *      ...
+       *      image_primary,
+       *      image_secondary
+       *   }
+       * }
+       */
+
+      const section = response?.data || {};
 
       setForm({
-        badge_text: section.badge_text || "",
-        title: section.title || "",
-        description: section.description || "",
+        id: section.id ?? null,
+
+        badge_text:
+          section.badge_text || "",
+
+        title:
+          section.title || "",
+
+        description:
+          section.description || "",
+
         overlay_badge_text:
           section.overlay_badge_text || "",
+
         primary_btn_text:
           section.primary_btn_text || "",
+
         primary_btn_link:
           section.primary_btn_link || "",
+
         secondary_btn_text:
           section.secondary_btn_text || "",
+
         secondary_btn_link:
           section.secondary_btn_link || "",
       });
+
+      /* =====================================================
+         CURRENT IMAGES
+      ===================================================== */
 
       setCurrentPrimary(
         section.image_primary || null
@@ -79,16 +145,23 @@ export default function About() {
         section.image_secondary || null
       );
 
-      /*
-       * Features are a separate API endpoint in your
-       * adminApi.js, so load them separately.
-       */
-      const featureData = await aboutApi.features.list();
+      /* =====================================================
+         LOAD FEATURES
+      ===================================================== */
 
-      setFeatures(featureData || []);
+      const featureData =
+        await aboutApi.features.list();
+
+      setFeatures(
+        Array.isArray(featureData)
+          ? featureData
+          : []
+      );
+
     } catch (err) {
       setError(
-        err?.message || "Failed to load About section."
+        err?.message ||
+          "Failed to load About section."
       );
     } finally {
       setLoading(false);
@@ -96,7 +169,7 @@ export default function About() {
   }
 
   /* =========================================================
-     HANDLE FORM INPUT
+     ABOUT INPUT
   ========================================================= */
 
   function handleChange(e) {
@@ -115,63 +188,126 @@ export default function About() {
      IMAGE PICKER
   ========================================================= */
 
-  function pickImage(e, type) {
+  function handleImagePick(e, type) {
     const file = e.target.files?.[0];
 
     if (!file) {
       return;
     }
 
-    const previewUrl = URL.createObjectURL(file);
+    /* -------------------------------------------------------
+       Validate image type
+    ------------------------------------------------------- */
+
+    if (!file.type.startsWith("image/")) {
+      setError(
+        "Please select a valid image file."
+      );
+
+      e.target.value = "";
+      return;
+    }
+
+    /* -------------------------------------------------------
+       Maximum size: 5 MB
+    ------------------------------------------------------- */
+
+    const maxSize =
+      5 * 1024 * 1024;
+
+    if (file.size > maxSize) {
+      setError(
+        "Image size must be less than 5 MB."
+      );
+
+      e.target.value = "";
+      return;
+    }
+
+    /* -------------------------------------------------------
+       Create preview
+    ------------------------------------------------------- */
+
+    const previewUrl =
+      URL.createObjectURL(file);
 
     if (type === "primary") {
-      setNewPrimary(file);
-
       if (previewPrimary) {
-        URL.revokeObjectURL(previewPrimary);
+        URL.revokeObjectURL(
+          previewPrimary
+        );
       }
 
+      setNewPrimary(file);
       setPreviewPrimary(previewUrl);
+
     } else {
-      setNewSecondary(file);
 
       if (previewSecondary) {
-        URL.revokeObjectURL(previewSecondary);
+        URL.revokeObjectURL(
+          previewSecondary
+        );
       }
 
+      setNewSecondary(file);
       setPreviewSecondary(previewUrl);
     }
+
+    setError("");
+    setSuccess("");
+
+    /*
+     * Allow selecting the same file again.
+     */
+    e.target.value = "";
+  }
+
+  /* =========================================================
+     CANCEL PRIMARY IMAGE
+  ========================================================= */
+
+  function removeNewPrimary() {
+    if (previewPrimary) {
+      URL.revokeObjectURL(
+        previewPrimary
+      );
+    }
+
+    setNewPrimary(null);
+    setPreviewPrimary(null);
 
     setError("");
     setSuccess("");
   }
 
   /* =========================================================
-     IMAGE URL
+     CANCEL SECONDARY IMAGE
   ========================================================= */
 
-  function getImageUrl(image) {
-    if (!image) {
-      return null;
+  function removeNewSecondary() {
+    if (previewSecondary) {
+      URL.revokeObjectURL(
+        previewSecondary
+      );
     }
 
-    if (
-      image.startsWith("http://") ||
-      image.startsWith("https://") ||
-      image.startsWith("/")
-    ) {
-      return image;
-    }
+    setNewSecondary(null);
+    setPreviewSecondary(null);
 
-    return `${IMAGE_BASE}/${image}`;
+    setError("");
+    setSuccess("");
   }
 
   /* =========================================================
-     SAVE ABOUT SECTION
+     SAVE ABOUT
   ========================================================= */
 
   async function handleSave(e) {
     e.preventDefault();
+
+    if (saving) {
+      return;
+    }
 
     setSaving(true);
     setError("");
@@ -179,42 +315,108 @@ export default function About() {
 
     try {
       /*
-       * Your current adminApi.js uses:
+       * Prepare all About fields.
        *
-       * aboutApi.update(fields)
-       *
-       * Therefore only JSON fields are sent here.
+       * Images are included only when a new file
+       * was selected.
        */
-      await aboutApi.update(form);
 
-      setSuccess(
-        "About section updated successfully."
-      );
+      const fields = {
+        id: form.id ?? 1,
+
+        badge_text:
+          form.badge_text,
+
+        title:
+          form.title,
+
+        description:
+          form.description,
+
+        overlay_badge_text:
+          form.overlay_badge_text,
+
+        primary_btn_text:
+          form.primary_btn_text,
+
+        primary_btn_link:
+          form.primary_btn_link,
+
+        secondary_btn_text:
+          form.secondary_btn_text,
+
+        secondary_btn_link:
+          form.secondary_btn_link,
+      };
+
+      /* -----------------------------------------------------
+         PRIMARY IMAGE
+      ----------------------------------------------------- */
+
+      if (newPrimary) {
+        fields.image_primary =
+          newPrimary;
+      }
+
+      /* -----------------------------------------------------
+         SECONDARY IMAGE
+      ----------------------------------------------------- */
+
+      if (newSecondary) {
+        fields.image_secondary =
+          newSecondary;
+      }
 
       /*
-       * Clear image selections after saving.
+       * Send one multipart request.
+       *
+       * This is the same approach used by Hero.
        */
-      setNewPrimary(null);
-      setNewSecondary(null);
+      const response =
+        await aboutApi.update(fields);
+
+      setSuccess(
+        response?.message ||
+          (
+            newPrimary ||
+            newSecondary
+              ? "About section and images updated successfully."
+              : "About section updated successfully."
+          )
+      );
+
+      /* -----------------------------------------------------
+         Clear temporary images
+      ----------------------------------------------------- */
 
       if (previewPrimary) {
-        URL.revokeObjectURL(previewPrimary);
+        URL.revokeObjectURL(
+          previewPrimary
+        );
       }
 
       if (previewSecondary) {
-        URL.revokeObjectURL(previewSecondary);
+        URL.revokeObjectURL(
+          previewSecondary
+        );
       }
 
       setPreviewPrimary(null);
       setPreviewSecondary(null);
 
-      /*
-       * Reload saved data.
-       */
+      setNewPrimary(null);
+      setNewSecondary(null);
+
+      /* -----------------------------------------------------
+         Reload database values
+      ----------------------------------------------------- */
+
       await loadAbout();
+
     } catch (err) {
       setError(
-        err?.message || "Failed to update About section."
+        err?.message ||
+          "Unable to update About section."
       );
     } finally {
       setSaving(false);
@@ -225,19 +427,20 @@ export default function About() {
      FEATURE FIELD CHANGE
   ========================================================= */
 
-  function handleFeatureFieldChange(
-    id,
+  function handleFeatureChange(
+    index,
     field,
     value
   ) {
     setFeatures((previous) =>
-      previous.map((feature) =>
-        feature.id === id
-          ? {
-              ...feature,
-              [field]: value,
-            }
-          : feature
+      previous.map(
+        (feature, i) =>
+          i === index
+            ? {
+                ...feature,
+                [field]: value,
+              }
+            : feature
       )
     );
 
@@ -249,7 +452,13 @@ export default function About() {
      SAVE FEATURE
   ========================================================= */
 
-  async function handleFeatureSave(feature) {
+  async function handleFeatureSave(
+    feature
+  ) {
+    if (!feature?.id) {
+      return;
+    }
+
     setFeatureSaving(feature.id);
     setError("");
     setSuccess("");
@@ -258,10 +467,19 @@ export default function About() {
       await aboutApi.features.update(
         feature.id,
         {
-          icon: feature.icon,
-          title: feature.title,
-          description: feature.description,
-          display_order: feature.display_order,
+          icon:
+            feature.icon || "",
+
+          title:
+            feature.title || "",
+
+          description:
+            feature.description || "",
+
+          display_order:
+            Number(
+              feature.display_order
+            ) || 0,
         }
       );
 
@@ -270,12 +488,17 @@ export default function About() {
       );
 
       /*
-       * Refresh features from database.
+       * Reload features from database.
        */
       const updatedFeatures =
         await aboutApi.features.list();
 
-      setFeatures(updatedFeatures || []);
+      setFeatures(
+        Array.isArray(updatedFeatures)
+          ? updatedFeatures
+          : []
+      );
+
     } catch (err) {
       setError(
         err?.message ||
@@ -287,12 +510,13 @@ export default function About() {
   }
 
   /* =========================================================
-     LOADING STATE
+     LOADING
   ========================================================= */
 
   if (loading) {
     return (
       <div className="loading-state">
+
         <div
           className="spinner-border"
           role="status"
@@ -302,10 +526,25 @@ export default function About() {
           </span>
         </div>
 
-        <span>Loading About section...</span>
+        <span>
+          Loading About section...
+        </span>
+
       </div>
     );
   }
+
+  /* =========================================================
+     IMAGE TO DISPLAY
+  ========================================================= */
+
+  const displayedPrimary =
+    previewPrimary ||
+    getImageUrl(currentPrimary);
+
+  const displayedSecondary =
+    previewSecondary ||
+    getImageUrl(currentSecondary);
 
   /* =========================================================
      PAGE
@@ -313,189 +552,419 @@ export default function About() {
 
   return (
     <>
-      {/* PAGE HEADER */}
+      {/* =====================================================
+          PAGE HEADER
+      ====================================================== */}
+
       <div className="page-header">
+
         <div>
-          <h1>About Section</h1>
+
+          <h1>
+            About Section
+          </h1>
 
           <p>
-            Manage the company story and information
-            displayed on the homepage.
+            Manage the company story,
+            images, content, and feature
+            highlights displayed on the
+            homepage.
           </p>
+
         </div>
+
       </div>
 
-      {/* ERROR */}
+
+      {/* =====================================================
+          ERROR
+      ====================================================== */}
+
       {error && (
         <div
           className="alert alert-danger p-3 mb-3"
           role="alert"
         >
+
+          <i className="bi bi-exclamation-triangle me-2" />
+
           {error}
+
         </div>
       )}
 
-      {/* SUCCESS */}
+
+      {/* =====================================================
+          SUCCESS
+      ====================================================== */}
+
       {success && (
         <div
           className="alert alert-success p-3 mb-3"
           role="alert"
         >
+
+          <i className="bi bi-check-circle me-2" />
+
           {success}
+
         </div>
       )}
 
+
       <div className="split-manager">
 
-        {/* =====================================================
-            IMAGES
-        ====================================================== */}
+
+        {/* ===================================================
+            ABOUT IMAGES
+        ==================================================== */}
 
         <div className="content-card form-card">
+
           <div className="card-heading">
+
             <div>
-              <h3>About Images</h3>
+
+              <h3>
+                About Images
+              </h3>
 
               <p>
-                Manage the images displayed in the
-                About section.
+                Manage the images displayed
+                in the About section.
               </p>
+
             </div>
+
           </div>
 
-          {/* PRIMARY IMAGE */}
-          <div className="mb-4">
-            <div className="form-label">
-              Primary Image
-            </div>
 
-            {previewPrimary || currentPrimary ? (
+          {/* =================================================
+              PRIMARY IMAGE
+          ================================================== */}
+
+          <div className="mb-4">
+
+            <label className="form-label">
+              Primary Image
+            </label>
+
+
+            {displayedPrimary ? (
+
               <img
                 className="image-preview mb-2"
-                src={
-                  previewPrimary ||
-                  getImageUrl(currentPrimary)
-                }
+                src={displayedPrimary}
                 alt="About primary"
               />
+
             ) : (
+
               <div className="image-placeholder compact mb-2">
+
                 <i className="bi bi-image" />
 
-                <span>No image uploaded</span>
+                <span>
+                  No image uploaded
+                </span>
+
               </div>
+
             )}
 
-            <label
-              className="admin-btn btn btn-sm mb-0"
-              style={{ cursor: "pointer" }}
-            >
-              <i className="bi bi-upload me-2" />
 
-              Choose Primary Image
+            <div className="form-actions-modern">
 
-              <input
-                type="file"
-                accept="image/*"
-                hidden
-                onChange={(e) =>
-                  pickImage(e, "primary")
-                }
-              />
-            </label>
+              <label
+                className="admin-btn btn btn-sm mb-0"
+                style={{
+                  cursor: saving
+                    ? "not-allowed"
+                    : "pointer",
+                }}
+              >
+
+                <i className="bi bi-upload me-2" />
+
+                {newPrimary
+                  ? "Change Image"
+                  : "Choose Primary Image"}
+
+                <input
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  disabled={saving}
+                  onChange={(e) =>
+                    handleImagePick(
+                      e,
+                      "primary"
+                    )
+                  }
+                />
+
+              </label>
+
+
+              {newPrimary && (
+
+                <button
+                  type="button"
+                  className="btn btn-outline-danger btn-sm"
+                  onClick={
+                    removeNewPrimary
+                  }
+                  disabled={saving}
+                >
+
+                  <i className="bi bi-x-lg me-2" />
+
+                  Cancel New Image
+
+                </button>
+
+              )}
+
+            </div>
+
 
             {newPrimary && (
-              <div className="text-muted mt-2">
-                Selected: {newPrimary.name}
+
+              <div className="mt-2 text-muted">
+
+                <i className="bi bi-file-image me-2" />
+
+                Selected:
+
+                {" "}
+
+                <strong>
+                  {newPrimary.name}
+                </strong>
+
               </div>
+
             )}
+
+
+            {!newPrimary &&
+              currentPrimary && (
+
+                <div className="mt-2 text-muted">
+
+                  <small>
+
+                    Current image:
+
+                    {" "}
+
+                    <strong>
+                      {currentPrimary}
+                    </strong>
+
+                  </small>
+
+                </div>
+
+              )}
+
           </div>
 
-          {/* SECONDARY IMAGE */}
+
+          {/* =================================================
+              SECONDARY IMAGE
+          ================================================== */}
+
           <div>
-            <div className="form-label">
+
+            <label className="form-label">
               Secondary Image
-            </div>
-
-            {previewSecondary ||
-            currentSecondary ? (
-              <img
-                className="image-preview mb-2"
-                src={
-                  previewSecondary ||
-                  getImageUrl(currentSecondary)
-                }
-                alt="About secondary"
-              />
-            ) : (
-              <div className="image-placeholder compact mb-2">
-                <i className="bi bi-image" />
-
-                <span>No image uploaded</span>
-              </div>
-            )}
-
-            <label
-              className="admin-btn btn btn-sm mb-0"
-              style={{ cursor: "pointer" }}
-            >
-              <i className="bi bi-upload me-2" />
-
-              Choose Secondary Image
-
-              <input
-                type="file"
-                accept="image/*"
-                hidden
-                onChange={(e) =>
-                  pickImage(e, "secondary")
-                }
-              />
             </label>
 
-            {newSecondary && (
-              <div className="text-muted mt-2">
-                Selected: {newSecondary.name}
+
+            {displayedSecondary ? (
+
+              <img
+                className="image-preview mb-2"
+                src={displayedSecondary}
+                alt="About secondary"
+              />
+
+            ) : (
+
+              <div className="image-placeholder compact mb-2">
+
+                <i className="bi bi-image" />
+
+                <span>
+                  No image uploaded
+                </span>
+
               </div>
+
             )}
+
+
+            <div className="form-actions-modern">
+
+              <label
+                className="admin-btn btn btn-sm mb-0"
+                style={{
+                  cursor: saving
+                    ? "not-allowed"
+                    : "pointer",
+                }}
+              >
+
+                <i className="bi bi-upload me-2" />
+
+                {newSecondary
+                  ? "Change Image"
+                  : "Choose Secondary Image"}
+
+                <input
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  disabled={saving}
+                  onChange={(e) =>
+                    handleImagePick(
+                      e,
+                      "secondary"
+                    )
+                  }
+                />
+
+              </label>
+
+
+              {newSecondary && (
+
+                <button
+                  type="button"
+                  className="btn btn-outline-danger btn-sm"
+                  onClick={
+                    removeNewSecondary
+                  }
+                  disabled={saving}
+                >
+
+                  <i className="bi bi-x-lg me-2" />
+
+                  Cancel New Image
+
+                </button>
+
+              )}
+
+            </div>
+
+
+            {newSecondary && (
+
+              <div className="mt-2 text-muted">
+
+                <i className="bi bi-file-image me-2" />
+
+                Selected:
+
+                {" "}
+
+                <strong>
+                  {newSecondary.name}
+                </strong>
+
+              </div>
+
+            )}
+
+
+            {!newSecondary &&
+              currentSecondary && (
+
+                <div className="mt-2 text-muted">
+
+                  <small>
+
+                    Current image:
+
+                    {" "}
+
+                    <strong>
+                      {currentSecondary}
+                    </strong>
+
+                  </small>
+
+                </div>
+
+              )}
+
           </div>
 
-          {(newPrimary || newSecondary) && (
-            <div className="alert alert-warning mt-3 mb-0">
+
+          {/* =================================================
+              UPLOAD INFORMATION
+          ================================================== */}
+
+          {(newPrimary ||
+            newSecondary) && (
+
+            <div className="alert alert-info mt-3 mb-0">
+
               <small>
-                The selected images are previewed here.
-                Your current JSON API does not upload
-                image files. A multipart upload endpoint
-                is required to permanently save new image
-                files.
+
+                The selected image will be
+                uploaded when you click{" "}
+
+                <strong>
+                  Save Changes
+                </strong>
+                .
+
               </small>
+
             </div>
+
           )}
+
         </div>
 
-        {/* =====================================================
-            CONTENT
-        ====================================================== */}
+
+        {/* ===================================================
+            ABOUT CONTENT
+        ==================================================== */}
 
         <form
           className="content-card form-card"
           onSubmit={handleSave}
         >
+
           <div className="card-heading">
+
             <div>
-              <h3>About Content</h3>
+
+              <h3>
+                About Content
+              </h3>
 
               <p>
-                Edit the text and buttons displayed
-                in the About section.
+                Edit the text and buttons
+                displayed in the About section.
               </p>
+
             </div>
+
           </div>
+
 
           <div className="row g-3">
 
+
             {/* BADGE */}
+
             <div className="col-md-6">
+
               <label
                 htmlFor="badge_text"
                 className="form-label"
@@ -505,15 +974,24 @@ export default function About() {
 
               <input
                 id="badge_text"
+                type="text"
                 className="form-input form-control"
                 name="badge_text"
-                value={form.badge_text}
-                onChange={handleChange}
+                value={
+                  form.badge_text
+                }
+                onChange={
+                  handleChange
+                }
               />
+
             </div>
 
+
             {/* OVERLAY BADGE */}
+
             <div className="col-md-6">
+
               <label
                 htmlFor="overlay_badge_text"
                 className="form-label"
@@ -523,17 +1001,24 @@ export default function About() {
 
               <input
                 id="overlay_badge_text"
+                type="text"
                 className="form-input form-control"
                 name="overlay_badge_text"
                 value={
                   form.overlay_badge_text
                 }
-                onChange={handleChange}
+                onChange={
+                  handleChange
+                }
               />
+
             </div>
 
+
             {/* TITLE */}
+
             <div className="col-12">
+
               <label
                 htmlFor="title"
                 className="form-label"
@@ -543,15 +1028,24 @@ export default function About() {
 
               <input
                 id="title"
+                type="text"
                 className="form-input form-control"
                 name="title"
-                value={form.title}
-                onChange={handleChange}
+                value={
+                  form.title
+                }
+                onChange={
+                  handleChange
+                }
               />
+
             </div>
 
+
             {/* DESCRIPTION */}
+
             <div className="col-12">
+
               <label
                 htmlFor="description"
                 className="form-label"
@@ -563,14 +1057,22 @@ export default function About() {
                 id="description"
                 className="form-input form-control"
                 name="description"
-                value={form.description}
-                onChange={handleChange}
+                value={
+                  form.description
+                }
+                onChange={
+                  handleChange
+                }
                 rows="5"
               />
+
             </div>
 
+
             {/* PRIMARY BUTTON TEXT */}
+
             <div className="col-md-6">
+
               <label
                 htmlFor="primary_btn_text"
                 className="form-label"
@@ -580,17 +1082,24 @@ export default function About() {
 
               <input
                 id="primary_btn_text"
+                type="text"
                 className="form-input form-control"
                 name="primary_btn_text"
                 value={
                   form.primary_btn_text
                 }
-                onChange={handleChange}
+                onChange={
+                  handleChange
+                }
               />
+
             </div>
 
+
             {/* PRIMARY BUTTON LINK */}
+
             <div className="col-md-6">
+
               <label
                 htmlFor="primary_btn_link"
                 className="form-label"
@@ -600,17 +1109,24 @@ export default function About() {
 
               <input
                 id="primary_btn_link"
+                type="text"
                 className="form-input form-control"
                 name="primary_btn_link"
                 value={
                   form.primary_btn_link
                 }
-                onChange={handleChange}
+                onChange={
+                  handleChange
+                }
               />
+
             </div>
 
+
             {/* SECONDARY BUTTON TEXT */}
+
             <div className="col-md-6">
+
               <label
                 htmlFor="secondary_btn_text"
                 className="form-label"
@@ -620,17 +1136,24 @@ export default function About() {
 
               <input
                 id="secondary_btn_text"
+                type="text"
                 className="form-input form-control"
                 name="secondary_btn_text"
                 value={
                   form.secondary_btn_text
                 }
-                onChange={handleChange}
+                onChange={
+                  handleChange
+                }
               />
+
             </div>
 
+
             {/* SECONDARY BUTTON LINK */}
+
             <div className="col-md-6">
+
               <label
                 htmlFor="secondary_btn_link"
                 className="form-label"
@@ -640,24 +1163,36 @@ export default function About() {
 
               <input
                 id="secondary_btn_link"
+                type="text"
                 className="form-input form-control"
                 name="secondary_btn_link"
                 value={
                   form.secondary_btn_link
                 }
-                onChange={handleChange}
+                onChange={
+                  handleChange
+                }
               />
+
             </div>
+
           </div>
 
-          {/* SAVE */}
+
+          {/* =================================================
+              SAVE
+          ================================================== */}
+
           <div className="form-actions-modern">
+
             <button
               className="admin-btn btn"
               type="submit"
               disabled={saving}
             >
+
               {saving ? (
+
                 <>
                   <span
                     className="spinner-border spinner-border-sm me-2"
@@ -666,179 +1201,250 @@ export default function About() {
                   />
 
                   Saving...
+
                 </>
+
               ) : (
+
                 <>
                   <i className="bi bi-check-lg me-2" />
 
                   Save Changes
+
                 </>
+
               )}
+
             </button>
+
           </div>
+
         </form>
+
       </div>
+
 
       {/* =====================================================
           ABOUT FEATURES
       ====================================================== */}
 
       <div className="content-card list-card mt-3">
+
         <div className="card-heading">
+
           <div>
-            <h3>About Features</h3>
+
+            <h3>
+              About Features
+            </h3>
 
             <span>
-              Edit the feature highlights displayed
-              in the About section.
+              Edit the feature highlights
+              displayed in the About section.
             </span>
+
           </div>
+
         </div>
+
 
         <div className="stack-list">
-          {features.map((feature) => (
-            <div
-              className="data-item"
-              key={feature.id}
-            >
-              {/* ICON */}
-              <div className="data-icon">
-                <i
-                  className={`bi ${
-                    feature.icon ||
-                    "bi-star"
-                  }`}
-                />
-              </div>
 
-              {/* FEATURE CONTENT */}
+          {features.map(
+            (feature, index) => (
+
               <div
-                className="data-info"
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                  flex: 1,
-                }}
+                className="data-item"
+                key={
+                  feature.id ??
+                  `feature-${index}`
+                }
               >
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 10,
-                  }}
-                >
-                  {/* ICON */}
-                  <input
-                    className="form-input form-control form-control-sm"
-                    style={{
-                      maxWidth: 150,
-                    }}
-                    value={
-                      feature.icon || ""
-                    }
-                    onChange={(e) =>
-                      handleFeatureFieldChange(
-                        feature.id,
-                        "icon",
-                        e.target.value
-                      )
-                    }
-                    placeholder="bi-icon-name"
+
+                {/* =================================================
+                    FEATURE ICON PREVIEW
+                ================================================== */}
+
+                <div className="data-icon">
+
+                  <i
+                    className={`bi ${
+                      feature.icon ||
+                      "bi-star"
+                    }`}
                   />
 
-                  {/* TITLE */}
-                  <input
-                    className="form-input form-control form-control-sm"
-                    value={
-                      feature.title || ""
-                    }
-                    onChange={(e) =>
-                      handleFeatureFieldChange(
-                        feature.id,
-                        "title",
-                        e.target.value
-                      )
-                    }
-                    placeholder="Title"
-                  />
-
-                  {/* ORDER */}
-                  <input
-                    className="form-input form-control form-control-sm"
-                    style={{
-                      maxWidth: 80,
-                    }}
-                    type="number"
-                    value={
-                      feature.display_order ??
-                      0
-                    }
-                    onChange={(e) =>
-                      handleFeatureFieldChange(
-                        feature.id,
-                        "display_order",
-                        e.target.value
-                      )
-                    }
-                    placeholder="Order"
-                  />
                 </div>
 
-                {/* DESCRIPTION */}
-                <textarea
-                  className="form-input form-control form-control-sm"
-                  value={
-                    feature.description || ""
-                  }
-                  onChange={(e) =>
-                    handleFeatureFieldChange(
-                      feature.id,
-                      "description",
-                      e.target.value
-                    )
-                  }
-                  placeholder="Description"
-                  rows={2}
-                />
+
+                {/* =================================================
+                    FEATURE CONTENT
+                ================================================== */}
+
+                <div
+                  className="data-info"
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                    flex: 1,
+                  }}
+                >
+
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 10,
+                    }}
+                  >
+
+                    {/* ICON */}
+
+                    <input
+                      className="form-input form-control form-control-sm"
+                      style={{
+                        maxWidth: 150,
+                      }}
+                      value={
+                        feature.icon ||
+                        ""
+                      }
+                      onChange={(e) =>
+                        handleFeatureChange(
+                          index,
+                          "icon",
+                          e.target.value
+                        )
+                      }
+                      placeholder="bi-buildings"
+                    />
+
+
+                    {/* TITLE */}
+
+                    <input
+                      className="form-input form-control form-control-sm"
+                      value={
+                        feature.title ||
+                        ""
+                      }
+                      onChange={(e) =>
+                        handleFeatureChange(
+                          index,
+                          "title",
+                          e.target.value
+                        )
+                      }
+                      placeholder="Feature title"
+                    />
+
+
+                    {/* ORDER */}
+
+                    <input
+                      className="form-input form-control form-control-sm"
+                      style={{
+                        maxWidth: 80,
+                      }}
+                      type="number"
+                      min="1"
+                      value={
+                        feature.display_order ??
+                        ""
+                      }
+                      onChange={(e) =>
+                        handleFeatureChange(
+                          index,
+                          "display_order",
+                          e.target.value
+                        )
+                      }
+                      placeholder="Order"
+                    />
+
+                  </div>
+
+
+                  {/* DESCRIPTION */}
+
+                  <textarea
+                    className="form-input form-control form-control-sm"
+                    value={
+                      feature.description ||
+                      ""
+                    }
+                    onChange={(e) =>
+                      handleFeatureChange(
+                        index,
+                        "description",
+                        e.target.value
+                      )
+                    }
+                    placeholder="Feature description"
+                    rows={2}
+                  />
+
+                </div>
+
+
+                {/* =================================================
+                    SAVE FEATURE
+                ================================================== */}
+
+                <div className="data-actions">
+
+                  <button
+                    className="btn-icon"
+                    type="button"
+                    disabled={
+                      featureSaving ===
+                      feature.id
+                    }
+                    onClick={() =>
+                      handleFeatureSave(
+                        feature
+                      )
+                    }
+                    title="Save feature"
+                  >
+
+                    {featureSaving ===
+                    feature.id ? (
+
+                      <span
+                        className="spinner-border spinner-border-sm"
+                        role="status"
+                        aria-hidden="true"
+                      />
+
+                    ) : (
+
+                      <i className="bi bi-check2" />
+
+                    )}
+
+                  </button>
+
+                </div>
+
               </div>
 
-              {/* SAVE FEATURE */}
-              <div className="data-actions">
-                <button
-                  className="btn-icon"
-                  type="button"
-                  disabled={
-                    featureSaving ===
-                    feature.id
-                  }
-                  onClick={() =>
-                    handleFeatureSave(
-                      feature
-                    )
-                  }
-                  title="Save feature"
-                >
-                  {featureSaving ===
-                  feature.id ? (
-                    <span
-                      className="spinner-border spinner-border-sm"
-                      role="status"
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <i className="bi bi-check2" />
-                  )}
-                </button>
-              </div>
-            </div>
-          ))}
+            )
+          )}
+
 
           {features.length === 0 && (
+
             <div className="empty-state">
-              No features found.
+
+              No About features found.
+
             </div>
+
           )}
+
         </div>
+
       </div>
     </>
   );

@@ -1,8 +1,6 @@
-import React, { useEffect, useState } from "react";
-import { heroApi } from "../api/adminApi";
 
-const IMAGE_BASE =
-  import.meta.env?.VITE_UPLOADS_BASE_URL || "/uploads";
+import React, { useEffect, useState } from "react";
+import { heroApi, getImageUrl } from "../api/adminApi";
 
 export default function Hero() {
   const [loading, setLoading] = useState(true);
@@ -21,7 +19,6 @@ export default function Hero() {
     primary_btn_link: "",
     secondary_btn_text: "",
     secondary_btn_link: "",
-    background_image: "",
   });
 
   const [counters, setCounters] = useState([]);
@@ -30,15 +27,21 @@ export default function Hero() {
   const [newImageFile, setNewImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
 
-
   /* =========================================================
      LOAD HERO
   ========================================================= */
 
   useEffect(() => {
     loadHero();
-  }, []);
 
+    return () => {
+      if (imagePreview) {
+        URL.revokeObjectURL(imagePreview);
+      }
+    };
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function loadHero() {
     setLoading(true);
@@ -47,39 +50,65 @@ export default function Hero() {
     try {
       const response = await heroApi.get();
 
-      const section =
-        response?.data ||
-        response?.section ||
-        response ||
-        {};
+      /*
+       * Backend GET response:
+       *
+       * {
+       *   data: {
+       *     id,
+       *     badge_text,
+       *     title_text,
+       *     ...
+       *     background_image,
+       *     counters: [...]
+       *   }
+       * }
+       */
+
+      const hero = response?.data || {};
 
       setForm({
-        id: section.id || null,
-        badge_text: section.badge_text || "",
-        title_text: section.title_text || "",
-        title_highlight: section.title_highlight || "",
-        subtitle: section.subtitle || "",
+        id: hero.id ?? null,
+
+        badge_text:
+          hero.badge_text || "",
+
+        title_text:
+          hero.title_text || "",
+
+        title_highlight:
+          hero.title_highlight || "",
+
+        subtitle:
+          hero.subtitle || "",
+
         primary_btn_text:
-          section.primary_btn_text || "",
+          hero.primary_btn_text || "",
+
         primary_btn_link:
-          section.primary_btn_link || "",
+          hero.primary_btn_link || "",
+
         secondary_btn_text:
-          section.secondary_btn_text || "",
+          hero.secondary_btn_text || "",
+
         secondary_btn_link:
-          section.secondary_btn_link || "",
-        background_image:
-          section.background_image || "",
+          hero.secondary_btn_link || "",
       });
 
+      /*
+       * IMPORTANT:
+       * The image filename comes directly from the database.
+       */
       setCurrentImage(
-        section.background_image || null
+        hero.background_image || null
       );
 
-
-      /* Load Hero counters */
+      /*
+       * Load counters from database.
+       */
       setCounters(
-        Array.isArray(section.counters)
-          ? section.counters
+        Array.isArray(hero.counters)
+          ? hero.counters
           : []
       );
 
@@ -93,9 +122,8 @@ export default function Hero() {
     }
   }
 
-
   /* =========================================================
-     HANDLE HERO INPUT
+     HERO INPUT
   ========================================================= */
 
   function handleChange(e) {
@@ -110,9 +138,13 @@ export default function Hero() {
     setSuccess("");
   }
 
-
   /* =========================================================
-     HANDLE COUNTER INPUT
+     COUNTER INPUT
+     
+     Only VALUE, LABEL and ORDER are editable.
+     
+     The icon is intentionally not displayed because
+     the client Hero does not use counter icons.
   ========================================================= */
 
   function handleCounterChange(
@@ -135,9 +167,8 @@ export default function Hero() {
     setSuccess("");
   }
 
-
   /* =========================================================
-     HANDLE IMAGE
+     IMAGE SELECTION
   ========================================================= */
 
   function handleImagePick(e) {
@@ -147,33 +178,107 @@ export default function Hero() {
       return;
     }
 
+    /*
+     * Validate image type.
+     */
+    if (!file.type.startsWith("image/")) {
+      setError(
+        "Please select a valid image file."
+      );
+
+      e.target.value = "";
+      return;
+    }
+
+    /*
+     * Maximum image size: 5 MB.
+     */
+    const maxSize =
+      5 * 1024 * 1024;
+
+    if (file.size > maxSize) {
+      setError(
+        "Image size must be less than 5 MB."
+      );
+
+      e.target.value = "";
+      return;
+    }
+
+    /*
+     * Remove previous preview URL.
+     */
+    if (imagePreview) {
+      URL.revokeObjectURL(imagePreview);
+    }
+
+    /*
+     * Store the actual File object.
+     */
     setNewImageFile(file);
 
-    const previewUrl =
-      URL.createObjectURL(file);
+    /*
+     * Create temporary browser preview.
+     */
+    setImagePreview(
+      URL.createObjectURL(file)
+    );
 
-    setImagePreview(previewUrl);
+    setError("");
+    setSuccess("");
+
+    /*
+     * Allow selecting the same file again.
+     */
+    e.target.value = "";
+  }
+
+  /* =========================================================
+     CANCEL NEW IMAGE
+  ========================================================= */
+
+  function handleRemoveNewImage() {
+    if (imagePreview) {
+      URL.revokeObjectURL(imagePreview);
+    }
+
+    setNewImageFile(null);
+    setImagePreview(null);
 
     setError("");
     setSuccess("");
   }
 
-
   /* =========================================================
-     SAVE HERO + COUNTERS
+     SAVE HERO + COUNTERS + IMAGE
   ========================================================= */
 
   async function handleSave(e) {
     e.preventDefault();
+
+    if (saving) {
+      return;
+    }
 
     setSaving(true);
     setError("");
     setSuccess("");
 
     try {
+      /*
+       * Prepare hero data.
+       *
+       * IMPORTANT:
+       * The existing database counter "icon" is NOT
+       * edited from the admin panel.
+       *
+       * We keep the existing icon value when sending
+       * the counter so the backend does not accidentally
+       * erase it.
+       */
 
       const fields = {
-        id: form.id,
+        id: form.id ?? 1,
 
         badge_text:
           form.badge_text,
@@ -199,88 +304,87 @@ export default function Hero() {
         secondary_btn_link:
           form.secondary_btn_link,
 
-        counters: counters.map((counter) => ({
-          id: counter.id,
-          icon: counter.icon || "",
-          value: counter.value || "",
-          label: counter.label || "",
-          display_order:
-            Number(counter.display_order) || 0,
-        })),
+        counters:
+          counters.map(
+            (counter, index) => ({
+              id:
+                counter.id ?? null,
+
+              /*
+               * Keep the existing icon value in the
+               * database without displaying/editing it.
+               */
+              icon:
+                counter.icon || "",
+
+              value:
+                counter.value || "",
+
+              label:
+                counter.label || "",
+
+              display_order:
+                Number(
+                  counter.display_order
+                ) || index + 1,
+            })
+          ),
       };
 
-
       /*
-       * The current API accepts JSON.
+       * Only send background_image when a NEW
+       * image was selected.
        *
-       * Therefore a newly selected image file
-       * is only previewed for now.
-       *
-       * Existing background_image remains saved.
+       * If no new image was selected, PHP keeps
+       * the existing database image.
        */
-
-      if (
-        !newImageFile &&
-        form.background_image
-      ) {
+      if (newImageFile) {
         fields.background_image =
-          form.background_image;
+          newImageFile;
       }
 
-
-      await heroApi.update(fields);
-
+      /*
+       * Send one multipart request.
+       */
+      const response =
+        await heroApi.update(fields);
 
       setSuccess(
-        "Hero section and counters updated successfully."
+        response?.message ||
+          (
+            newImageFile
+              ? "Hero section, counters, and background image updated successfully."
+              : "Hero section and counters updated successfully."
+          )
       );
 
-
-      setNewImageFile(null);
-
+      /*
+       * Remove temporary image preview.
+       */
       if (imagePreview) {
         URL.revokeObjectURL(imagePreview);
       }
 
       setImagePreview(null);
+      setNewImageFile(null);
 
-
+      /*
+       * Reload the actual database values.
+       *
+       * This is important because PHP may have
+       * generated/saved a new image filename.
+       */
       await loadHero();
 
     } catch (err) {
-
       setError(
         err?.message ||
-          "Failed to update hero section."
+          "Unable to update Hero section."
       );
-
     } finally {
-
       setSaving(false);
     }
   }
-
-
-  /* =========================================================
-     IMAGE URL
-  ========================================================= */
-
-  function getImageUrl(image) {
-    if (!image) {
-      return null;
-    }
-
-    if (
-      image.startsWith("http://") ||
-      image.startsWith("https://") ||
-      image.startsWith("/")
-    ) {
-      return image;
-    }
-
-    return `${IMAGE_BASE}/${image}`;
-  }
-
 
   /* =========================================================
      LOADING
@@ -307,6 +411,13 @@ export default function Hero() {
     );
   }
 
+  /* =========================================================
+     IMAGE TO DISPLAY
+  ========================================================= */
+
+  const displayedImage =
+    imagePreview ||
+    getImageUrl(currentImage);
 
   /* =========================================================
      PAGE
@@ -319,6 +430,7 @@ export default function Hero() {
       ====================================================== */}
 
       <div className="page-header">
+
         <div>
 
           <h1>
@@ -326,11 +438,13 @@ export default function Hero() {
           </h1>
 
           <p>
-            Manage the main content and statistics
-            displayed at the top of the homepage.
+            Manage the main content and
+            statistics displayed at the top
+            of the homepage.
           </p>
 
         </div>
+
       </div>
 
 
@@ -343,7 +457,11 @@ export default function Hero() {
           className="alert alert-danger p-3 mb-3"
           role="alert"
         >
+
+          <i className="bi bi-exclamation-triangle me-2" />
+
           {error}
+
         </div>
       )}
 
@@ -357,12 +475,17 @@ export default function Hero() {
           className="alert alert-success p-3 mb-3"
           role="alert"
         >
+
+          <i className="bi bi-check-circle me-2" />
+
           {success}
+
         </div>
       )}
 
 
       <div className="split-manager">
+
 
         {/* ===================================================
             BACKGROUND IMAGE
@@ -379,8 +502,8 @@ export default function Hero() {
               </h3>
 
               <p>
-                Select the image used as the hero
-                background.
+                Select the image used as the
+                hero background.
               </p>
 
             </div>
@@ -388,14 +511,15 @@ export default function Hero() {
           </div>
 
 
-          {imagePreview || currentImage ? (
+          {/* =================================================
+              IMAGE PREVIEW
+          ================================================== */}
+
+          {displayedImage ? (
 
             <img
               className="image-preview"
-              src={
-                imagePreview ||
-                getImageUrl(currentImage)
-              }
+              src={displayedImage}
               alt="Hero background"
             />
 
@@ -414,47 +538,135 @@ export default function Hero() {
           )}
 
 
+          {/* =================================================
+              IMAGE ACTIONS
+          ================================================== */}
+
           <div className="form-actions-modern">
 
             <label
               className="admin-btn btn btn-sm mb-0"
-              style={{ cursor: "pointer" }}
+              style={{
+                cursor: saving
+                  ? "not-allowed"
+                  : "pointer",
+              }}
             >
 
               <i className="bi bi-upload me-2" />
 
-              Choose Image
+              {newImageFile
+                ? "Change Image"
+                : "Choose Image"}
 
               <input
                 type="file"
                 accept="image/*"
                 hidden
-                onChange={handleImagePick}
+                disabled={saving}
+                onChange={
+                  handleImagePick
+                }
               />
 
             </label>
 
+
+            {/* CANCEL NEW IMAGE */}
+
+            {newImageFile && (
+
+              <button
+                type="button"
+                className="btn btn-outline-danger btn-sm"
+                onClick={
+                  handleRemoveNewImage
+                }
+                disabled={saving}
+              >
+
+                <i className="bi bi-x-lg me-2" />
+
+                Cancel New Image
+
+              </button>
+
+            )}
+
           </div>
 
 
+          {/* =================================================
+              SELECTED FILE
+          ================================================== */}
+
           {newImageFile && (
+
             <div className="mt-2 text-muted">
-              Selected: {newImageFile.name}
+
+              <i className="bi bi-file-image me-2" />
+
+              Selected:
+
+              {" "}
+
+              <strong>
+                {newImageFile.name}
+              </strong>
+
             </div>
+
           )}
 
 
+          {/* =================================================
+              UPLOAD INFORMATION
+          ================================================== */}
+
           {newImageFile && (
-            <div className="alert alert-warning mt-3 mb-0">
+
+            <div className="alert alert-info mt-3 mb-0">
 
               <small>
-                The image is currently previewed only.
-                File uploading requires a multipart
-                upload endpoint.
+
+                This image will be uploaded
+                when you click{" "}
+
+                <strong>
+                  Save Changes
+                </strong>.
+
               </small>
 
             </div>
+
           )}
+
+
+          {/* =================================================
+              CURRENT IMAGE
+          ================================================== */}
+
+          {!newImageFile &&
+            currentImage && (
+
+              <div className="mt-3 text-muted">
+
+                <small>
+
+                  Current image:
+
+                  {" "}
+
+                  <strong>
+                    {currentImage}
+                  </strong>
+
+                </small>
+
+              </div>
+
+            )}
 
         </div>
 
@@ -477,8 +689,8 @@ export default function Hero() {
               </h3>
 
               <p>
-                Edit the text and buttons displayed
-                in the hero section.
+                Edit the text and buttons
+                displayed in the hero section.
               </p>
 
             </div>
@@ -487,6 +699,7 @@ export default function Hero() {
 
 
           <div className="row g-3">
+
 
             {/* BADGE */}
 
@@ -504,8 +717,12 @@ export default function Hero() {
                 type="text"
                 className="form-input form-control"
                 name="badge_text"
-                value={form.badge_text}
-                onChange={handleChange}
+                value={
+                  form.badge_text
+                }
+                onChange={
+                  handleChange
+                }
               />
 
             </div>
@@ -527,8 +744,12 @@ export default function Hero() {
                 type="text"
                 className="form-input form-control"
                 name="title_highlight"
-                value={form.title_highlight}
-                onChange={handleChange}
+                value={
+                  form.title_highlight
+                }
+                onChange={
+                  handleChange
+                }
               />
 
             </div>
@@ -550,8 +771,12 @@ export default function Hero() {
                 type="text"
                 className="form-input form-control"
                 name="title_text"
-                value={form.title_text}
-                onChange={handleChange}
+                value={
+                  form.title_text
+                }
+                onChange={
+                  handleChange
+                }
               />
 
             </div>
@@ -572,8 +797,12 @@ export default function Hero() {
                 id="subtitle"
                 className="form-input form-control"
                 name="subtitle"
-                value={form.subtitle}
-                onChange={handleChange}
+                value={
+                  form.subtitle
+                }
+                onChange={
+                  handleChange
+                }
                 rows="4"
               />
 
@@ -596,8 +825,12 @@ export default function Hero() {
                 type="text"
                 className="form-input form-control"
                 name="primary_btn_text"
-                value={form.primary_btn_text}
-                onChange={handleChange}
+                value={
+                  form.primary_btn_text
+                }
+                onChange={
+                  handleChange
+                }
               />
 
             </div>
@@ -619,8 +852,12 @@ export default function Hero() {
                 type="text"
                 className="form-input form-control"
                 name="primary_btn_link"
-                value={form.primary_btn_link}
-                onChange={handleChange}
+                value={
+                  form.primary_btn_link
+                }
+                onChange={
+                  handleChange
+                }
               />
 
             </div>
@@ -642,8 +879,12 @@ export default function Hero() {
                 type="text"
                 className="form-input form-control"
                 name="secondary_btn_text"
-                value={form.secondary_btn_text}
-                onChange={handleChange}
+                value={
+                  form.secondary_btn_text
+                }
+                onChange={
+                  handleChange
+                }
               />
 
             </div>
@@ -665,8 +906,12 @@ export default function Hero() {
                 type="text"
                 className="form-input form-control"
                 name="secondary_btn_link"
-                value={form.secondary_btn_link}
-                onChange={handleChange}
+                value={
+                  form.secondary_btn_link
+                }
+                onChange={
+                  handleChange
+                }
               />
 
             </div>
@@ -676,6 +921,13 @@ export default function Hero() {
 
           {/* =================================================
               HERO COUNTERS
+              
+              Only:
+              - Value
+              - Label
+              - Order
+
+              No icon input.
           ================================================== */}
 
           <div className="mt-4">
@@ -689,8 +941,8 @@ export default function Hero() {
                 </h3>
 
                 <p>
-                  Edit the statistics displayed in
-                  the Hero section.
+                  Edit the statistics displayed
+                  in the Hero section.
                 </p>
 
               </div>
@@ -700,121 +952,110 @@ export default function Hero() {
 
             <div className="row g-3">
 
-              {counters.map((counter, index) => (
+              {counters.map(
+                (counter, index) => (
 
-                <div
-                  className="col-12"
-                  key={counter.id}
-                >
+                  <div
+                    className="col-12"
+                    key={
+                      counter.id ??
+                      `counter-${index}`
+                    }
+                  >
 
-                  <div className="border rounded p-3">
+                    <div className="border rounded p-3">
 
-                    <div className="row g-3">
-
-                      {/* ICON */}
-
-                      <div className="col-md-3">
-
-                        <label className="form-label">
-                          Icon
-                        </label>
-
-                        <input
-                          type="text"
-                          className="form-input form-control"
-                          value={
-                            counter.icon || ""
-                          }
-                          onChange={(e) =>
-                            handleCounterChange(
-                              index,
-                              "icon",
-                              e.target.value
-                            )
-                          }
-                          placeholder="bi-award"
-                        />
-
-                      </div>
+                      <div className="row g-3">
 
 
-                      {/* VALUE */}
+                        {/* VALUE */}
 
-                      <div className="col-md-3">
+                        <div className="col-md-4">
 
-                        <label className="form-label">
-                          Value
-                        </label>
+                          <label
+                            className="form-label"
+                          >
+                            Value
+                          </label>
 
-                        <input
-                          type="text"
-                          className="form-input form-control"
-                          value={
-                            counter.value || ""
-                          }
-                          onChange={(e) =>
-                            handleCounterChange(
-                              index,
-                              "value",
-                              e.target.value
-                            )
-                          }
-                          placeholder="25+"
-                        />
+                          <input
+                            type="text"
+                            className="form-input form-control"
+                            value={
+                              counter.value ||
+                              ""
+                            }
+                            onChange={(e) =>
+                              handleCounterChange(
+                                index,
+                                "value",
+                                e.target.value
+                              )
+                            }
+                            placeholder="25+"
+                          />
 
-                      </div>
-
-
-                      {/* LABEL */}
-
-                      <div className="col-md-4">
-
-                        <label className="form-label">
-                          Label
-                        </label>
-
-                        <input
-                          type="text"
-                          className="form-input form-control"
-                          value={
-                            counter.label || ""
-                          }
-                          onChange={(e) =>
-                            handleCounterChange(
-                              index,
-                              "label",
-                              e.target.value
-                            )
-                          }
-                          placeholder="Years Experience"
-                        />
-
-                      </div>
+                        </div>
 
 
-                      {/* ORDER */}
+                        {/* LABEL */}
 
-                      <div className="col-md-2">
+                        <div className="col-md-5">
 
-                        <label className="form-label">
-                          Order
-                        </label>
+                          <label
+                            className="form-label"
+                          >
+                            Label
+                          </label>
 
-                        <input
-                          type="number"
-                          min="1"
-                          className="form-input form-control"
-                          value={
-                            counter.display_order || ""
-                          }
-                          onChange={(e) =>
-                            handleCounterChange(
-                              index,
-                              "display_order",
-                              e.target.value
-                            )
-                          }
-                        />
+                          <input
+                            type="text"
+                            className="form-input form-control"
+                            value={
+                              counter.label ||
+                              ""
+                            }
+                            onChange={(e) =>
+                              handleCounterChange(
+                                index,
+                                "label",
+                                e.target.value
+                              )
+                            }
+                            placeholder="Years Experience"
+                          />
+
+                        </div>
+
+
+                        {/* ORDER */}
+
+                        <div className="col-md-3">
+
+                          <label
+                            className="form-label"
+                          >
+                            Order
+                          </label>
+
+                          <input
+                            type="number"
+                            min="1"
+                            className="form-input form-control"
+                            value={
+                              counter.display_order ??
+                              ""
+                            }
+                            onChange={(e) =>
+                              handleCounterChange(
+                                index,
+                                "display_order",
+                                e.target.value
+                              )
+                            }
+                          />
+
+                        </div>
 
                       </div>
 
@@ -822,17 +1063,20 @@ export default function Hero() {
 
                   </div>
 
-                </div>
-
-              ))}
+                )
+              )}
 
             </div>
 
 
             {counters.length === 0 && (
+
               <div className="alert alert-secondary">
+
                 No Hero counters found.
+
               </div>
+
             )}
 
           </div>

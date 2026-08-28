@@ -1,36 +1,28 @@
-```php
 <?php
 
 /**
  * /Server/api/admin/about/features/index.php
  *
- * ABOUT FEATURES API
+ * ABOUT FEATURES ADMIN API
  *
- * GET:
- *   /admin/about/features/index.php
- *       -> Get all About features
+ * GET
+ *   Returns all About features.
  *
- * GET ?id=1:
- *   /admin/about/features/index.php?id=1
- *       -> Get one About feature
+ * GET ?id=1
+ *   Returns one About feature.
  *
- * PUT ?id=1:
- *   /admin/about/features/index.php?id=1
- *       -> Update one About feature
- *
- * PATCH ?id=1:
- *   Same as PUT
+ * POST
+ *   Updates one About feature.
  *
  * Features are EDIT ONLY.
  * No CREATE.
  * No DELETE.
+ *
+ * Authentication:
+ *   require_admin()
  */
 
-require_once __DIR__ . '/../../../_bootstrap.php';
-
-header("Content-Type: application/json; charset=utf-8");
-
-$method = $_SERVER['REQUEST_METHOD'];
+require_once __DIR__ . '/../../_bootstrap.php';
 
 
 /* =========================================================
@@ -38,44 +30,47 @@ $method = $_SERVER['REQUEST_METHOD'];
 ========================================================= */
 
 /*
- * About feature images, if your table has an image field,
- * will be stored here:
+ * Project structure:
  *
  * construction-portfolio/
+ * ├── Server/
+ * │   └── api/
+ * │       └── admin/
+ * │           └── about/
+ * │               └── features/
+ * │                   └── index.php
+ * │
  * └── uploads/
  *     └── about/
  *         └── features/
+ *
+ * From:
+ * Server/api/admin/about/features/
+ *
+ * dirname(__DIR__, 5)
+ * = construction-portfolio/
  */
 
-$uploadDir = dirname(__DIR__, 5) . '/uploads/about/features';
-
-$uploadUrl =
-    '/construction-portfolio/uploads/about/features';
+$uploadDir =
+    dirname(__DIR__, 5) .
+    '/uploads/about/features/';
 
 
 /* =========================================================
-   HELPER: JSON RESPONSE
+   REQUEST METHOD
 ========================================================= */
 
-function send_json(array $data, int $status = 200): void
-{
-    http_response_code($status);
-
-    echo json_encode(
-        $data,
-        JSON_UNESCAPED_SLASHES |
-        JSON_UNESCAPED_UNICODE
-    );
-
-    exit;
-}
+$method = request_method();
 
 
 /* =========================================================
    GET ALL FEATURES
 ========================================================= */
 
-if ($method === 'GET' && !isset($_GET['id'])) {
+if (
+    $method === 'GET' &&
+    !isset($_GET['id'])
+) {
 
     $result = $conn->query("
         SELECT *
@@ -83,23 +78,30 @@ if ($method === 'GET' && !isset($_GET['id'])) {
         ORDER BY display_order ASC, id ASC
     ");
 
+
     if (!$result) {
 
-        send_json([
-            "success" => false,
-            "error" => $conn->error
-        ], 500);
+        database_error(
+            $conn,
+            'Unable to load About features.'
+        );
     }
+
 
     $features = [];
 
-    while ($row = $result->fetch_assoc()) {
+
+    while (
+        $row = $result->fetch_assoc()
+    ) {
+
         $features[] = $row;
+
     }
 
-    send_json([
-        "success" => true,
-        "data" => $features
+
+    admin_success([
+        'data' => $features
     ]);
 }
 
@@ -108,17 +110,16 @@ if ($method === 'GET' && !isset($_GET['id'])) {
    GET ONE FEATURE
 ========================================================= */
 
-if ($method === 'GET' && isset($_GET['id'])) {
+if (
+    $method === 'GET' &&
+    isset($_GET['id'])
+) {
 
-    $id = (int)$_GET['id'];
-
-    if ($id <= 0) {
-
-        send_json([
-            "success" => false,
-            "error" => "Valid feature ID is required."
-        ], 422);
-    }
+    $id = integer_value(
+        $_GET['id'],
+        'id',
+        1
+    );
 
 
     $stmt = $conn->prepare("
@@ -128,36 +129,55 @@ if ($method === 'GET' && isset($_GET['id'])) {
         LIMIT 1
     ");
 
+
     if (!$stmt) {
 
-        send_json([
-            "success" => false,
-            "error" => $conn->error
-        ], 500);
+        database_error(
+            $conn,
+            'Unable to prepare About feature query.'
+        );
     }
 
 
-    $stmt->bind_param("i", $id);
-    $stmt->execute();
+    $stmt->bind_param(
+        'i',
+        $id
+    );
 
-    $result = $stmt->get_result();
-    $feature = $result->fetch_assoc();
+
+    if (!$stmt->execute()) {
+
+        $stmt->close();
+
+        database_error(
+            $conn,
+            'Unable to load About feature.'
+        );
+    }
+
+
+    $result =
+        $stmt->get_result();
+
+
+    $feature =
+        $result->fetch_assoc();
+
 
     $stmt->close();
 
 
     if (!$feature) {
 
-        send_json([
-            "success" => false,
-            "error" => "About feature not found."
-        ], 404);
+        admin_error(
+            'About feature not found.',
+            404
+        );
     }
 
 
-    send_json([
-        "success" => true,
-        "data" => $feature
+    admin_success([
+        'data' => $feature
     ]);
 }
 
@@ -166,105 +186,23 @@ if ($method === 'GET' && isset($_GET['id'])) {
    UPDATE FEATURE
 ========================================================= */
 
-if ($method === 'PUT' || $method === 'PATCH') {
+if ($method === 'POST') {
 
     /*
-     * Only authenticated admins can update About features.
+     * Require authenticated admin.
      */
-    require_auth();
-
-
-    /* =====================================================
-       GET ID
-    ===================================================== */
-
-    /*
-     * Your adminApi currently sends the ID inside JSON:
-     *
-     * {
-     *   id: 1,
-     *   ...
-     * }
-     *
-     * So we support both:
-     *
-     * ?id=1
-     *
-     * and
-     *
-     * JSON { "id": 1 }
-     */
-
-    $queryId = isset($_GET['id'])
-        ? (int)$_GET['id']
-        : 0;
-
-
-    /* =====================================================
-       READ REQUEST BODY
-    ===================================================== */
-
-    $contentType =
-        $_SERVER['CONTENT_TYPE'] ??
-        $_SERVER['HTTP_CONTENT_TYPE'] ??
-        '';
-
-
-    $input = [];
-
-
-    if (
-        stripos(
-            $contentType,
-            'multipart/form-data'
-        ) !== false
-    ) {
-
-        /*
-         * FormData request.
-         */
-        $input = $_POST;
-
-    } else {
-
-        /*
-         * JSON request.
-         */
-        $rawBody = file_get_contents("php://input");
-
-        if (
-            $rawBody !== false &&
-            trim($rawBody) !== ''
-        ) {
-
-            $decoded = json_decode(
-                $rawBody,
-                true
-            );
-
-            if (is_array($decoded)) {
-                $input = $decoded;
-            }
-        }
-    }
+    $admin = require_admin();
 
 
     /* =====================================================
        FEATURE ID
     ===================================================== */
 
-    $id = $queryId > 0
-        ? $queryId
-        : (int)($input['id'] ?? 0);
-
-
-    if ($id <= 0) {
-
-        send_json([
-            "success" => false,
-            "error" => "Valid feature ID is required."
-        ], 422);
-    }
+    $id = integer_value(
+        $_POST['id'] ?? 0,
+        'id',
+        1
+    );
 
 
     /* =====================================================
@@ -278,37 +216,50 @@ if ($method === 'PUT' || $method === 'PATCH') {
         LIMIT 1
     ");
 
+
     if (!$existingStmt) {
 
-        send_json([
-            "success" => false,
-            "error" => $conn->error
-        ], 500);
+        database_error(
+            $conn,
+            'Unable to prepare About feature query.'
+        );
     }
 
 
     $existingStmt->bind_param(
-        "i",
+        'i',
         $id
     );
 
-    $existingStmt->execute();
+
+    if (!$existingStmt->execute()) {
+
+        $existingStmt->close();
+
+        database_error(
+            $conn,
+            'Unable to load About feature.'
+        );
+    }
+
 
     $existingResult =
         $existingStmt->get_result();
 
+
     $existing =
         $existingResult->fetch_assoc();
+
 
     $existingStmt->close();
 
 
     if (!$existing) {
 
-        send_json([
-            "success" => false,
-            "error" => "About feature not found."
-        ], 404);
+        admin_error(
+            'About feature not found.',
+            404
+        );
     }
 
 
@@ -316,32 +267,40 @@ if ($method === 'PUT' || $method === 'PATCH') {
        FEATURE FIELDS
     ===================================================== */
 
-    /*
-     * Keep the database value when a field is not supplied.
-     *
-     * This prevents an update from accidentally clearing
-     * existing data.
-     */
-
     $icon =
-        array_key_exists('icon', $input)
-            ? trim((string)$input['icon'])
-            : ($existing['icon'] ?? '');
+        string_value(
+            $_POST['icon']
+                ?? ($existing['icon'] ?? ''),
+            'icon',
+            100
+        );
+
 
     $title =
-        array_key_exists('title', $input)
-            ? trim((string)$input['title'])
-            : ($existing['title'] ?? '');
+        string_value(
+            $_POST['title']
+                ?? ($existing['title'] ?? ''),
+            'title',
+            255
+        );
+
 
     $description =
-        array_key_exists('description', $input)
-            ? trim((string)$input['description'])
-            : ($existing['description'] ?? '');
+        string_value(
+            $_POST['description']
+                ?? ($existing['description'] ?? ''),
+            'description',
+            2000
+        );
+
 
     $displayOrder =
-        array_key_exists('display_order', $input)
-            ? (int)$input['display_order']
-            : (int)($existing['display_order'] ?? 0);
+        integer_value(
+            $_POST['display_order']
+                ?? ($existing['display_order'] ?? 0),
+            'display_order',
+            0
+        );
 
 
     /* =====================================================
@@ -349,22 +308,22 @@ if ($method === 'PUT' || $method === 'PATCH') {
     ===================================================== */
 
     /*
-     * If your about_features table contains an image column,
-     * this code supports:
+     * Keep the existing image unless a new one is uploaded.
      *
-     * image
-     *
-     * If there is no image column, the image section can be
-     * removed later.
+     * This endpoint supports the image column if it exists.
      */
 
     $image =
         $existing['image'] ?? '';
 
+
     $oldImage =
         $image;
 
-    $newUploadedFile = null;
+
+    $newImageUploaded = false;
+
+    $newImageFilename = null;
 
 
     /* =====================================================
@@ -373,159 +332,200 @@ if ($method === 'PUT' || $method === 'PATCH') {
 
     if (
         isset($_FILES['image']) &&
-        is_array($_FILES['image'])
+        $_FILES['image']['error'] !== UPLOAD_ERR_NO_FILE
     ) {
 
-        $file = $_FILES['image'];
+        $file =
+            $_FILES['image'];
+
+
+        /* -------------------------------------------------
+           Upload error
+        ------------------------------------------------- */
+
+        if (
+            $file['error'] !== UPLOAD_ERR_OK
+        ) {
+
+            admin_error(
+                'Image upload failed.',
+                400
+            );
+        }
+
+
+        /* -------------------------------------------------
+           File size
+        ------------------------------------------------- */
+
+        $maxFileSize =
+            5 * 1024 * 1024;
 
 
         if (
-            isset($file['error']) &&
-            $file['error'] === UPLOAD_ERR_OK
+            $file['size'] > $maxFileSize
         ) {
 
-            /* ---------------------------------------------
-               Maximum file size: 5 MB
-            --------------------------------------------- */
+            admin_error(
+                'Image must be smaller than 5 MB.',
+                422
+            );
+        }
 
-            $maxFileSize =
-                5 * 1024 * 1024;
+
+        /* -------------------------------------------------
+           MIME validation
+        ------------------------------------------------- */
+
+        $finfo =
+            finfo_open(
+                FILEINFO_MIME_TYPE
+            );
+
+
+        if (!$finfo) {
+
+            admin_error(
+                'Unable to validate uploaded image.',
+                500
+            );
+        }
+
+
+        $mimeType =
+            finfo_file(
+                $finfo,
+                $file['tmp_name']
+            );
+
+
+        finfo_close($finfo);
+
+
+        $allowedMimeTypes = [
+
+            'image/jpeg' => 'jpg',
+
+            'image/png' => 'png',
+
+            'image/webp' => 'webp',
+
+            'image/gif' => 'gif',
+
+        ];
+
+
+        if (
+            !isset(
+                $allowedMimeTypes[$mimeType]
+            )
+        ) {
+
+            admin_error(
+                'Invalid image type. Allowed: JPG, PNG, WEBP, GIF.',
+                422
+            );
+        }
+
+
+        /* -------------------------------------------------
+           Create upload directory
+        ------------------------------------------------- */
+
+        if (!is_dir($uploadDir)) {
 
             if (
-                $file['size'] >
-                $maxFileSize
-            ) {
-
-                send_json([
-                    "success" => false,
-                    "error" =>
-                        "Image is too large. Maximum size is 5 MB."
-                ], 422);
-            }
-
-
-            /* ---------------------------------------------
-               Validate MIME type
-            --------------------------------------------- */
-
-            $finfo =
-                new finfo(FILEINFO_MIME_TYPE);
-
-            $mimeType =
-                $finfo->file(
-                    $file['tmp_name']
-                );
-
-
-            $allowedTypes = [
-                'image/jpeg' => 'jpg',
-                'image/png'  => 'png',
-                'image/webp' => 'webp',
-                'image/gif'  => 'gif',
-            ];
-
-
-            if (
-                !isset(
-                    $allowedTypes[$mimeType]
-                )
-            ) {
-
-                send_json([
-                    "success" => false,
-                    "error" =>
-                        "Invalid image type. Allowed formats: JPG, PNG, WEBP and GIF."
-                ], 422);
-            }
-
-
-            /* ---------------------------------------------
-               Create upload directory
-            --------------------------------------------- */
-
-            if (!is_dir($uploadDir)) {
-
-                if (!mkdir(
+                !mkdir(
                     $uploadDir,
                     0755,
                     true
-                )) {
-
-                    send_json([
-                        "success" => false,
-                        "error" =>
-                            "Unable to create image upload directory."
-                    ], 500);
-                }
-            }
-
-
-            /* ---------------------------------------------
-               Generate safe filename
-            --------------------------------------------- */
-
-            $extension =
-                $allowedTypes[$mimeType];
-
-            $filename =
-                'about_feature_' .
-                $id .
-                '_' .
-                bin2hex(
-                    random_bytes(8)
-                ) .
-                '.' .
-                $extension;
-
-
-            $destination =
-                rtrim(
-                    $uploadDir,
-                    DIRECTORY_SEPARATOR
-                ) .
-                DIRECTORY_SEPARATOR .
-                $filename;
-
-
-            /* ---------------------------------------------
-               Move uploaded image
-            --------------------------------------------- */
-
-            if (
-                !move_uploaded_file(
-                    $file['tmp_name'],
-                    $destination
                 )
             ) {
 
-                send_json([
-                    "success" => false,
-                    "error" =>
-                        "Unable to save uploaded image."
-                ], 500);
+                admin_error(
+                    'Unable to create About features upload directory.',
+                    500
+                );
             }
-
-
-            $image =
-                'uploads/about/features/' .
-                $filename;
-
-            $newUploadedFile =
-                $destination;
         }
+
+
+        /* -------------------------------------------------
+           Check writable
+        ------------------------------------------------- */
+
+        if (!is_writable($uploadDir)) {
+
+            admin_error(
+                'About features upload directory is not writable.',
+                500
+            );
+        }
+
+
+        /* -------------------------------------------------
+           Generate filename
+        ------------------------------------------------- */
+
+        $extension =
+            $allowedMimeTypes[$mimeType];
+
+
+        $newImageFilename =
+            'about-feature-' .
+            $id .
+            '-' .
+            bin2hex(
+                random_bytes(8)
+            ) .
+            '.' .
+            $extension;
+
+
+        $destination =
+            rtrim(
+                $uploadDir,
+                '/\\'
+            ) .
+            DIRECTORY_SEPARATOR .
+            $newImageFilename;
+
+
+        /* -------------------------------------------------
+           Move file
+        ------------------------------------------------- */
+
+        if (
+            !move_uploaded_file(
+                $file['tmp_name'],
+                $destination
+            )
+        ) {
+
+            admin_error(
+                'Unable to save uploaded image.',
+                500
+            );
+        }
+
+
+        /*
+         * Store only the filename in the database.
+         *
+         * This follows the same approach as Hero.
+         */
+
+        $image =
+            $newImageFilename;
+
+
+        $newImageUploaded = true;
     }
 
 
     /* =====================================================
-       UPDATE DATABASE
+       DATABASE UPDATE
     ===================================================== */
-
-    /*
-     * IMPORTANT:
-     *
-     * If your about_features table DOES NOT have an image
-     * column, use the alternative query shown below.
-     */
 
     $conn->begin_transaction();
 
@@ -533,15 +533,28 @@ if ($method === 'PUT' || $method === 'PATCH') {
     try {
 
         /*
-         * Check whether the table has an image column.
+         * Determine whether the database actually contains
+         * an image column.
+         *
+         * This is checked BEFORE preparing the UPDATE.
          */
+
         $columnsResult =
-            $conn->query("SHOW COLUMNS FROM about_features LIKE 'image'");
+            $conn->query("
+                SHOW COLUMNS
+                FROM about_features
+                LIKE 'image'
+            ");
+
 
         $hasImageColumn =
             $columnsResult &&
             $columnsResult->num_rows > 0;
 
+
+        /* =================================================
+           UPDATE WITH IMAGE
+        ================================================= */
 
         if ($hasImageColumn) {
 
@@ -556,15 +569,17 @@ if ($method === 'PUT' || $method === 'PATCH') {
                 WHERE id = ?
             ");
 
+
             if (!$stmt) {
+
                 throw new Exception(
-                    $conn->error
+                    'Unable to prepare About feature update.'
                 );
             }
 
 
             $stmt->bind_param(
-                "sssisi",
+                'sssisi',
                 $icon,
                 $title,
                 $description,
@@ -573,7 +588,34 @@ if ($method === 'PUT' || $method === 'PATCH') {
                 $id
             );
 
-        } else {
+        }
+
+
+        /* =================================================
+           UPDATE WITHOUT IMAGE
+        ================================================= */
+
+        else {
+
+            /*
+             * If the table has no image column,
+             * update only the real feature fields.
+             */
+
+            if ($newImageUploaded) {
+
+                /*
+                 * A file was uploaded but the table does not
+                 * have an image column.
+                 *
+                 * Do not silently leave an orphaned file.
+                 */
+
+                throw new Exception(
+                    'The about_features table does not contain an image column.'
+                );
+            }
+
 
             $stmt = $conn->prepare("
                 UPDATE about_features
@@ -585,15 +627,17 @@ if ($method === 'PUT' || $method === 'PATCH') {
                 WHERE id = ?
             ");
 
+
             if (!$stmt) {
+
                 throw new Exception(
-                    $conn->error
+                    'Unable to prepare About feature update.'
                 );
             }
 
 
             $stmt->bind_param(
-                "sssii",
+                'sssii',
                 $icon,
                 $title,
                 $description,
@@ -603,10 +647,16 @@ if ($method === 'PUT' || $method === 'PATCH') {
         }
 
 
+        /* =================================================
+           EXECUTE
+        ================================================= */
+
         if (!$stmt->execute()) {
 
+            $stmt->close();
+
             throw new Exception(
-                $stmt->error
+                'Unable to update About feature.'
             );
         }
 
@@ -621,49 +671,97 @@ if ($method === 'PUT' || $method === 'PATCH') {
         $conn->commit();
 
 
-        /* =================================================
-           DELETE OLD IMAGE
-        ================================================= */
+    } catch (
+        Throwable $e
+    ) {
+
+        /* -------------------------------------------------
+           Rollback
+        ------------------------------------------------- */
+
+        $conn->rollback();
+
+
+        /* -------------------------------------------------
+           Delete newly uploaded image
+        ------------------------------------------------- */
 
         if (
-            $newUploadedFile &&
-            $oldImage &&
-            $oldImage !== $image
+            $newImageUploaded &&
+            $newImageFilename
         ) {
 
-            $oldFilename =
-                basename(
-                    parse_url(
-                        $oldImage,
-                        PHP_URL_PATH
-                    ) ?: $oldImage
+            $newImagePath =
+                rtrim(
+                    $uploadDir,
+                    '/\\'
+                ) .
+                DIRECTORY_SEPARATOR .
+                $newImageFilename;
+
+
+            if (
+                is_file($newImagePath)
+            ) {
+
+                @unlink(
+                    $newImagePath
                 );
-
-
-            if ($oldFilename) {
-
-                $oldPath =
-                    rtrim(
-                        $uploadDir,
-                        DIRECTORY_SEPARATOR
-                    ) .
-                    DIRECTORY_SEPARATOR .
-                    $oldFilename;
-
-
-                if (
-                    is_file($oldPath)
-                ) {
-
-                    @unlink($oldPath);
-                }
             }
         }
 
 
-        /* =================================================
-           GET UPDATED FEATURE
-        ================================================= */
+        error_log(
+            'About feature update error: ' .
+            $e->getMessage()
+        );
+
+
+        admin_error(
+            'Unable to update About feature.',
+            500
+        );
+    }
+
+
+    /* =====================================================
+       DELETE OLD IMAGE
+       POST-COMMIT / BEST EFFORT
+    ===================================================== */
+
+    if (
+        $newImageUploaded &&
+        !empty($oldImage) &&
+        $oldImage !== $image
+    ) {
+
+        try {
+
+            delete_old_image(
+                $oldImage,
+                $uploadDir
+            );
+
+        } catch (
+            Throwable $e
+        ) {
+
+            error_log(
+                'About feature old-image cleanup warning: ' .
+                $e->getMessage()
+            );
+        }
+    }
+
+
+    /* =====================================================
+       RE-FETCH UPDATED FEATURE
+    ===================================================== */
+
+    $updatedFeature = null;
+
+
+    try {
 
         $updatedStmt =
             $conn->prepare("
@@ -673,55 +771,98 @@ if ($method === 'PUT' || $method === 'PATCH') {
                 LIMIT 1
             ");
 
-        $updatedStmt->bind_param(
-            "i",
-            $id
-        );
 
-        $updatedStmt->execute();
+        if (!$updatedStmt) {
 
-        $updatedResult =
-            $updatedStmt->get_result();
-
-        $updatedFeature =
-            $updatedResult->fetch_assoc();
-
-        $updatedStmt->close();
-
-
-        send_json([
-            "success" => true,
-            "message" =>
-                "About feature updated successfully.",
-            "data" => $updatedFeature
-        ]);
-
-
-    } catch (Throwable $e) {
-
-        $conn->rollback();
-
-
-        /*
-         * Remove newly uploaded image if the database
-         * update failed.
-         */
-        if (
-            $newUploadedFile &&
-            is_file($newUploadedFile)
-        ) {
-
-            @unlink(
-                $newUploadedFile
+            throw new Exception(
+                'Unable to prepare updated feature query.'
             );
         }
 
 
-        send_json([
-            "success" => false,
-            "error" => $e->getMessage()
-        ], 500);
+        $updatedStmt->bind_param(
+            'i',
+            $id
+        );
+
+
+        if (
+            !$updatedStmt->execute()
+        ) {
+
+            $updatedStmt->close();
+
+            throw new Exception(
+                'Unable to load updated About feature.'
+            );
+        }
+
+
+        $updatedResult =
+            $updatedStmt->get_result();
+
+
+        $updatedFeature =
+            $updatedResult->fetch_assoc();
+
+
+        $updatedStmt->close();
+
+
+    } catch (
+        Throwable $e
+    ) {
+
+        error_log(
+            'About feature post-update fetch warning: ' .
+            $e->getMessage()
+        );
+
+
+        /*
+         * The database update already succeeded.
+         * Return the values we know were saved.
+         */
+
+        $updatedFeature =
+            array_merge(
+                $existing,
+                [
+                    'id' =>
+                        $id,
+
+                    'icon' =>
+                        $icon,
+
+                    'title' =>
+                        $title,
+
+                    'description' =>
+                        $description,
+
+                    'display_order' =>
+                        $displayOrder,
+
+                    'image' =>
+                        $image
+                ]
+            );
     }
+
+
+    /* =====================================================
+       SUCCESS
+    ===================================================== */
+
+    admin_success([
+
+        'message' =>
+            'About feature updated successfully.',
+
+        'data' =>
+            $updatedFeature
+
+    ]);
 }
 
 
@@ -729,8 +870,11 @@ if ($method === 'PUT' || $method === 'PATCH') {
    METHOD NOT ALLOWED
 ========================================================= */
 
-send_json([
-    "success" => false,
-    "error" => "Method not allowed."
-], 405);
-```
+header(
+    'Allow: GET, POST'
+);
+
+admin_error(
+    'Method not allowed.',
+    405
+);

@@ -10,135 +10,29 @@
  *
  * POST
  *   Updates Hero section + counters.
- *   Supports image upload using multipart/form-data.
+ *   Supports background image upload using multipart/form-data.
  *
- * Supported Hero fields:
- *   badge_text
- *   title_text
- *   title_highlight
- *   subtitle
- *   primary_btn_text
- *   primary_btn_link
- *   secondary_btn_text
- *   secondary_btn_link
- *
- * Image:
- *   background_image
- *
- * Counters:
- *   counters[id][icon]
- *   counters[id][value]
- *   counters[id][label]
- *   counters[id][display_order]
+ * Authentication:
+ *   require_admin()
  */
 
-require_once __DIR__ . '/../../_bootstrap.php';
-
-header("Content-Type: application/json; charset=utf-8");
-
-$method = $_SERVER['REQUEST_METHOD'];
+require_once __DIR__ . '/../_bootstrap.php';
 
 
 /* =========================================================
-   UPLOAD DIRECTORY
+   UPLOAD CONFIGURATION
 ========================================================= */
 
-/*
- * This should point to your public uploads folder.
- *
- * Example:
- *
- * construction-portfolio/
- * ├── Server/
- * │   └── api/
- * └── uploads/
- *
- * If your uploads folder is somewhere else,
- * change this path.
- */
-
-$uploadDir = __DIR__ . '/../../../uploads/';
-
-
-/* =========================================================
-   UPLOAD URL
-========================================================= */
+$uploadDir = __DIR__ . '/../../../../uploads/';
 
 $uploadUrl = '/construction-portfolio/uploads/';
 
 
 /* =========================================================
-   HELPER: JSON RESPONSE
+   REQUEST METHOD
 ========================================================= */
 
-function json_response(array $data, int $status = 200): void
-{
-    http_response_code($status);
-
-    echo json_encode(
-        $data,
-        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
-    );
-
-    exit;
-}
-
-
-/* =========================================================
-   HELPER: DELETE OLD IMAGE
-========================================================= */
-
-function delete_old_image(
-    ?string $image,
-    string $uploadDir
-): void {
-
-    if (!$image) {
-        return;
-    }
-
-    /*
-     * Extract only the filename.
-     *
-     * This prevents deleting arbitrary files if the
-     * database accidentally contains a full URL.
-     */
-
-    $filename = basename(parse_url($image, PHP_URL_PATH));
-
-    if (!$filename) {
-        return;
-    }
-
-    /*
-     * Only allow common image extensions.
-     */
-
-    $allowedExtensions = [
-        'jpg',
-        'jpeg',
-        'png',
-        'gif',
-        'webp',
-        'svg'
-    ];
-
-    $extension = strtolower(
-        pathinfo($filename, PATHINFO_EXTENSION)
-    );
-
-    if (!in_array($extension, $allowedExtensions, true)) {
-        return;
-    }
-
-    $filePath = rtrim($uploadDir, '/\\')
-        . DIRECTORY_SEPARATOR
-        . $filename;
-
-    if (is_file($filePath)) {
-        @unlink($filePath);
-    }
-}
+$method = request_method();
 
 
 /* =========================================================
@@ -148,7 +42,7 @@ function delete_old_image(
 if ($method === 'GET') {
 
     /* -------------------------------------------------------
-       Get Hero section
+       Get Hero
     ------------------------------------------------------- */
 
     $result = $conn->query("
@@ -160,25 +54,25 @@ if ($method === 'GET') {
 
     if (!$result) {
 
-        json_response([
-            "success" => false,
-            "error" => $conn->error
-        ], 500);
+        database_error(
+            $conn,
+            'Unable to load Hero section.'
+        );
     }
 
     $hero = $result->fetch_assoc();
 
     if (!$hero) {
 
-        json_response([
-            "success" => false,
-            "error" => "Hero section not found."
-        ], 404);
+        admin_error(
+            'Hero section not found.',
+            404
+        );
     }
 
 
     /* -------------------------------------------------------
-       Get Hero counters
+       Get Hero Counters
     ------------------------------------------------------- */
 
     $counterResult = $conn->query("
@@ -195,67 +89,69 @@ if ($method === 'GET') {
 
     if (!$counterResult) {
 
-        json_response([
-            "success" => false,
-            "error" => $conn->error
-        ], 500);
+        database_error(
+            $conn,
+            'Unable to load Hero counters.'
+        );
     }
 
 
     $counters = [];
 
-    while ($row = $counterResult->fetch_assoc()) {
+    while (
+        $row = $counterResult->fetch_assoc()
+    ) {
+
         $counters[] = $row;
+
     }
 
 
     /* -------------------------------------------------------
-       Add counters to Hero
+       Attach Counters
     ------------------------------------------------------- */
 
-    $hero["counters"] = $counters;
+    $hero['counters'] = $counters;
 
 
-    json_response([
-        "success" => true,
-        "data" => $hero
+    /* -------------------------------------------------------
+       Response
+    ------------------------------------------------------- */
+
+    admin_success([
+        'data' => $hero
     ]);
 }
 
 
 /* =========================================================
-   UPDATE HERO + COUNTERS
+   UPDATE HERO
 ========================================================= */
 
 if ($method === 'POST') {
 
     /*
-     * Only authenticated admins can update Hero.
+     * Require authenticated admin.
      */
+    $admin = require_admin();
 
-    require_auth();
 
-
-    /* =======================================================
+    /* =====================================================
        HERO ID
-    ======================================================= */
+    ===================================================== */
 
-    $id = (int)($_POST['id'] ?? 1);
-
-    if ($id <= 0) {
-
-        json_response([
-            "success" => false,
-            "error" => "Valid Hero ID is required."
-        ], 422);
-    }
+    $id = integer_value(
+        $_POST['id'] ?? 1,
+        'id',
+        1
+    );
 
 
-    /* =======================================================
-       CHECK HERO EXISTS
-    ======================================================= */
+    /* =====================================================
+       GET EXISTING HERO
+    ===================================================== */
 
-   $heroStmt = $conn->prepare("
+    $heroStmt = $conn->prepare("
         SELECT *
         FROM hero_section
         WHERE id = ?
@@ -264,82 +160,122 @@ if ($method === 'POST') {
 
     if (!$heroStmt) {
 
-        json_response([
-            "success" => false,
-            "error" => $conn->error
-        ], 500);
+        database_error(
+            $conn,
+            'Unable to prepare Hero query.'
+        );
     }
 
-    $heroStmt->bind_param("i", $id);
-    $heroStmt->execute();
+    $heroStmt->bind_param(
+        'i',
+        $id
+    );
 
-    $heroResult = $heroStmt->get_result();
-    $existingHero = $heroResult->fetch_assoc();
+    if (!$heroStmt->execute()) {
+
+        $heroStmt->close();
+
+        database_error(
+            $conn,
+            'Unable to load Hero section.'
+        );
+    }
+
+    $heroResult =
+        $heroStmt->get_result();
+
+    $existingHero =
+        $heroResult->fetch_assoc();
 
     $heroStmt->close();
 
 
     if (!$existingHero) {
 
-        json_response([
-            "success" => false,
-            "error" => "Hero section not found."
-        ], 404);
+        admin_error(
+            'Hero section not found.',
+            404
+        );
     }
 
 
-    /* =======================================================
+    /* =====================================================
        HERO FIELDS
-    ======================================================= */
+    ===================================================== */
 
-    $badge_text = trim(
-        $_POST['badge_text'] ?? ''
-    );
+    $badge_text =
+        string_value(
+            $_POST['badge_text'] ?? '',
+            'badge_text',
+            255
+        );
 
-    $title_text = trim(
-        $_POST['title_text'] ?? ''
-    );
+    $title_text =
+        string_value(
+            $_POST['title_text'] ?? '',
+            'title_text',
+            500
+        );
 
-    $title_highlight = trim(
-        $_POST['title_highlight'] ?? ''
-    );
+    $title_highlight =
+        string_value(
+            $_POST['title_highlight'] ?? '',
+            'title_highlight',
+            255
+        );
 
-    $subtitle = trim(
-        $_POST['subtitle'] ?? ''
-    );
+    $subtitle =
+        string_value(
+            $_POST['subtitle'] ?? '',
+            'subtitle',
+            2000
+        );
 
-    $primary_btn_text = trim(
-        $_POST['primary_btn_text'] ?? ''
-    );
+    $primary_btn_text =
+        string_value(
+            $_POST['primary_btn_text'] ?? '',
+            'primary_btn_text',
+            255
+        );
 
-    $primary_btn_link = trim(
-        $_POST['primary_btn_link'] ?? ''
-    );
+    $primary_btn_link =
+        string_value(
+            $_POST['primary_btn_link'] ?? '',
+            'primary_btn_link',
+            1000
+        );
 
-    $secondary_btn_text = trim(
-        $_POST['secondary_btn_text'] ?? ''
-    );
+    $secondary_btn_text =
+        string_value(
+            $_POST['secondary_btn_text'] ?? '',
+            'secondary_btn_text',
+            255
+        );
 
-    $secondary_btn_link = trim(
-        $_POST['secondary_btn_link'] ?? ''
-    );
+    $secondary_btn_link =
+        string_value(
+            $_POST['secondary_btn_link'] ?? '',
+            'secondary_btn_link',
+            1000
+        );
 
 
-    /* =======================================================
-       KEEP CURRENT IMAGE BY DEFAULT
-    ======================================================= */
+    /* =====================================================
+       CURRENT IMAGE
+    ===================================================== */
 
     $background_image =
         $existingHero['background_image'] ?? '';
 
 
-    /* =======================================================
-       IMAGE UPLOAD
-    ======================================================= */
-
     $newImageUploaded = false;
+
     $newImageFilename = null;
 
+
+    /* =====================================================
+       IMAGE UPLOAD
+========================================================= */
 
     if (
         isset($_FILES['background_image']) &&
@@ -349,122 +285,220 @@ if ($method === 'POST') {
         $file = $_FILES['background_image'];
 
 
-        /* ---------------------------------------------------
-           Upload error
-        --------------------------------------------------- */
+        /* -------------------------------------------------
+           Upload Error
+        ------------------------------------------------- */
 
-        if ($file['error'] !== UPLOAD_ERR_OK) {
+        if (
+            $file['error'] !== UPLOAD_ERR_OK
+        ) {
 
-            json_response([
-                "success" => false,
-                "error" => "Image upload failed."
-            ], 400);
+            admin_error(
+                'Image upload failed.',
+                400
+            );
         }
 
 
-        /* ---------------------------------------------------
-           File size
-           Maximum: 5 MB
-        --------------------------------------------------- */
+        /* -------------------------------------------------
+           File Size
+        ------------------------------------------------- */
 
-        $maxFileSize = 5 * 1024 * 1024;
+        $maxFileSize =
+            5 * 1024 * 1024;
 
-        if ($file['size'] > $maxFileSize) {
+        if (
+            $file['size'] > $maxFileSize
+        ) {
 
-            json_response([
-                "success" => false,
-                "error" => "Image must be smaller than 5 MB."
-            ], 422);
+            admin_error(
+                'Image must be smaller than 5 MB.',
+                422
+            );
         }
 
 
-        /* ---------------------------------------------------
-           Validate MIME type
-        --------------------------------------------------- */
+        /* -------------------------------------------------
+           MIME Validation
+        ------------------------------------------------- */
 
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $finfo =
+            finfo_open(
+                FILEINFO_MIME_TYPE
+            );
 
-        $mimeType = finfo_file(
-            $finfo,
-            $file['tmp_name']
-        );
+        if (!$finfo) {
+
+            admin_error(
+                'Unable to validate uploaded image.',
+                500
+            );
+        }
+
+        $mimeType =
+            finfo_file(
+                $finfo,
+                $file['tmp_name']
+            );
 
         finfo_close($finfo);
 
 
         $allowedMimeTypes = [
+
             'image/jpeg' => 'jpg',
-            'image/png'  => 'png',
+
+            'image/png' => 'png',
+
             'image/webp' => 'webp',
-            'image/gif'  => 'gif'
+
+            'image/gif' => 'gif',
+
         ];
 
 
-        if (!isset($allowedMimeTypes[$mimeType])) {
+        if (
+            !isset(
+                $allowedMimeTypes[$mimeType]
+            )
+        ) {
 
-            json_response([
-                "success" => false,
-                "error" => "Invalid image type. Allowed: JPG, PNG, WEBP, GIF."
-            ], 422);
+            admin_error(
+                'Invalid image type. Allowed: JPG, PNG, WEBP, GIF.',
+                422
+            );
         }
 
 
-        /* ---------------------------------------------------
-           Make sure upload directory exists
-        --------------------------------------------------- */
+        /* -------------------------------------------------
+           Make Upload Directory
+        ------------------------------------------------- */
 
         if (!is_dir($uploadDir)) {
 
-            if (!mkdir(
-                $uploadDir,
-                0755,
-                true
-            )) {
+            if (
+                !mkdir(
+                    $uploadDir,
+                    0755,
+                    true
+                )
+            ) {
 
-                json_response([
-                    "success" => false,
-                    "error" => "Unable to create uploads directory."
-                ], 500);
+                admin_error(
+                    'Unable to create uploads directory.',
+                    500
+                );
             }
         }
 
 
-        /* ---------------------------------------------------
-           Generate unique filename
-        --------------------------------------------------- */
+        /* -------------------------------------------------
+           Check Directory Writable
+        ------------------------------------------------- */
+
+        if (!is_writable($uploadDir)) {
+
+            admin_error(
+                'Uploads directory is not writable.',
+                500
+            );
+        }
+
+
+        /* -------------------------------------------------
+           Generate Filename
+
+           Uses the ORIGINAL filename from the admin's
+           computer (sanitized for filesystem/URL safety),
+           rather than a random hex name.
+
+           - The extension always follows the DETECTED mime
+             type above, never whatever the browser/client
+             claims, so a renamed .php can't sneak through
+             as "photo.jpg".
+           - If a file with that exact sanitized name already
+             exists in /uploads, a numeric suffix (-1, -2, ...)
+             is appended so it can't silently overwrite an
+             unrelated existing upload.
+        ------------------------------------------------- */
 
         $extension =
             $allowedMimeTypes[$mimeType];
 
-        $newImageFilename =
-            'hero_' .
-            bin2hex(random_bytes(8)) .
-            '.' .
-            $extension;
+        $originalName =
+            pathinfo(
+                $file['name'],
+                PATHINFO_FILENAME
+            );
 
+        $safeName =
+            preg_replace(
+                '/[^A-Za-z0-9_\-]+/',
+                '-',
+                $originalName
+            );
+
+        $safeName =
+            trim($safeName, '-');
+
+        if ($safeName === '') {
+
+            $safeName = 'hero';
+
+        }
+
+        $newImageFilename =
+            $safeName . '.' . $extension;
 
         $destination =
-            rtrim($uploadDir, '/\\') .
+            rtrim(
+                $uploadDir,
+                '/\\'
+            ) .
             DIRECTORY_SEPARATOR .
             $newImageFilename;
 
+        $suffix = 1;
 
-        /* ---------------------------------------------------
-           Move uploaded file
-        --------------------------------------------------- */
+        while (is_file($destination)) {
 
-        if (!move_uploaded_file(
-            $file['tmp_name'],
-            $destination
-        )) {
+            $newImageFilename =
+                $safeName . '-' . $suffix . '.' . $extension;
 
-            json_response([
-                "success" => false,
-                "error" => "Unable to save uploaded image."
-            ], 500);
+            $destination =
+                rtrim(
+                    $uploadDir,
+                    '/\\'
+                ) .
+                DIRECTORY_SEPARATOR .
+                $newImageFilename;
+
+            $suffix++;
+
         }
 
 
+        /* -------------------------------------------------
+           Move File
+        ------------------------------------------------- */
+
+        if (
+            !move_uploaded_file(
+                $file['tmp_name'],
+                $destination
+            )
+        ) {
+
+            admin_error(
+                'Unable to save uploaded image.',
+                500
+            );
+        }
+
+
+        /*
+         * Store only the filename in DB.
+         */
         $background_image =
             $newImageFilename;
 
@@ -472,46 +506,39 @@ if ($method === 'POST') {
     }
 
 
-    /* =======================================================
+    /* =====================================================
        COUNTERS
-    ======================================================= */
+    ===================================================== */
 
-    /*
-     * FormData sends arrays like:
-     *
-     * counters[0][id]
-     * counters[0][icon]
-     * counters[0][value]
-     * counters[0][label]
-     * counters[0][display_order]
-     */
-
-    $counters = $_POST['counters'] ?? [];
+    $counters =
+        $_POST['counters'] ?? [];
 
 
-    if (!is_array($counters)) {
-
-        /*
-         * If no counters were submitted, simply keep
-         * existing counters unchanged.
-         */
+    if (
+        !is_array($counters)
+    ) {
 
         $counters = [];
+
     }
 
 
-    /* =======================================================
-       START TRANSACTION
-    ======================================================= */
+    /* =====================================================
+       TRANSACTION
+       (ONLY the two UPDATE statements live in here — nothing
+       that runs after a successful commit belongs inside this
+       try/catch, because a failure at that point would no
+       longer mean the write failed, just that some follow-up
+       step did.)
+    ===================================================== */
 
     $conn->begin_transaction();
 
-
     try {
 
-        /* =====================================================
+        /* =================================================
            UPDATE HERO
-        ===================================================== */
+        ================================================= */
 
         $stmt = $conn->prepare("
             UPDATE hero_section
@@ -528,16 +555,16 @@ if ($method === 'POST') {
             WHERE id = ?
         ");
 
-
         if (!$stmt) {
+
             throw new Exception(
-                $conn->error
+                'Unable to prepare Hero update.'
             );
         }
 
 
         $stmt->bind_param(
-            "sssssssssi",
+            'sssssssssi',
             $badge_text,
             $title_text,
             $title_highlight,
@@ -553,8 +580,10 @@ if ($method === 'POST') {
 
         if (!$stmt->execute()) {
 
+            $stmt->close();
+
             throw new Exception(
-                $stmt->error
+                'Unable to update Hero section.'
             );
         }
 
@@ -562,68 +591,99 @@ if ($method === 'POST') {
         $stmt->close();
 
 
-        /* =====================================================
+        /* =================================================
            UPDATE COUNTERS
-        ===================================================== */
+        ================================================= */
 
-        if (!empty($counters)) {
+        if (
+            !empty($counters)
+        ) {
 
-            $counterStmt = $conn->prepare("
-                UPDATE counters
-                SET
-                    icon = ?,
-                    value = ?,
-                    label = ?,
-                    display_order = ?
-                WHERE id = ?
-                  AND section_key = 'hero'
-            ");
+            $counterStmt =
+                $conn->prepare("
+                    UPDATE counters
+                    SET
+                        icon = ?,
+                        value = ?,
+                        label = ?,
+                        display_order = ?
+                    WHERE id = ?
+                      AND section_key = 'hero'
+                ");
 
 
             if (!$counterStmt) {
 
                 throw new Exception(
-                    $conn->error
+                    'Unable to prepare counter update.'
                 );
             }
 
 
-            foreach ($counters as $counter) {
+            foreach (
+                $counters as $counter
+            ) {
 
-                if (!is_array($counter)) {
+                if (
+                    !is_array($counter)
+                ) {
+
                     continue;
+
                 }
 
 
                 $counterId =
-                    (int)($counter['id'] ?? 0);
+                    integer_value(
+                        $counter['id'] ?? 0,
+                        'counter id',
+                        0
+                    );
 
 
-                if ($counterId <= 0) {
+                if (
+                    $counterId <= 0
+                ) {
+
                     continue;
+
                 }
 
 
-                $icon = trim(
-                    $counter['icon'] ?? ''
-                );
+                $icon =
+                    string_value(
+                        $counter['icon'] ?? '',
+                        'counter icon',
+                        100
+                    );
 
-                $value = trim(
-                    $counter['value'] ?? ''
-                );
 
-                $label = trim(
-                    $counter['label'] ?? ''
-                );
+                $value =
+                    string_value(
+                        $counter['value'] ?? '',
+                        'counter value',
+                        100
+                    );
+
+
+                $label =
+                    string_value(
+                        $counter['label'] ?? '',
+                        'counter label',
+                        255
+                    );
+
 
                 $displayOrder =
-                    (int)(
-                        $counter['display_order'] ?? 0
+                    integer_value(
+                        $counter['display_order'] ?? 0,
+                        'display_order',
+                        0
                     );
 
 
                 $counterStmt->bind_param(
-                    "sssii",
+                    'sssii',
                     $icon,
                     $value,
                     $label,
@@ -632,91 +692,214 @@ if ($method === 'POST') {
                 );
 
 
-                if (!$counterStmt->execute()) {
+                if (
+                    !$counterStmt->execute()
+                ) {
+
+                    $counterStmt->close();
 
                     throw new Exception(
-                        $counterStmt->error
+                        'Unable to update Hero counter.'
                     );
                 }
+
             }
 
 
             $counterStmt->close();
+
         }
 
 
-        /* =====================================================
+        /* =================================================
            COMMIT
-        ===================================================== */
+           (Everything below this point in the file is
+           best-effort follow-up. Nothing after this line is
+           allowed to make the request "fail" or delete the
+           image that was just committed to the DB.)
+        ================================================= */
 
         $conn->commit();
 
 
-        /* =====================================================
-           DELETE OLD IMAGE
-        ===================================================== */
+    } catch (
+        Throwable $e
+    ) {
 
-        /*
-         * Delete the old image ONLY after the database
-         * transaction succeeds.
-         */
+        /* =================================================
+           ROLLBACK
+           (This branch only runs if the write itself failed —
+           i.e. before commit() above ever executed — so it's
+           still correct to delete the new image here.)
+        ================================================= */
+
+        $conn->rollback();
+
 
         if (
             $newImageUploaded &&
-            !empty($existingHero['background_image']) &&
-            $existingHero['background_image']
-                !== $background_image
+            $newImageFilename
         ) {
+
+            $newImagePath =
+                rtrim(
+                    $uploadDir,
+                    '/\\'
+                ) .
+                DIRECTORY_SEPARATOR .
+                $newImageFilename;
+
+
+            if (
+                is_file($newImagePath)
+            ) {
+
+                @unlink(
+                    $newImagePath
+                );
+
+            }
+
+        }
+
+
+        error_log(
+            'Hero update error: ' .
+            $e->getMessage()
+        );
+
+
+        admin_error(
+            'Unable to update Hero section.',
+            500
+        );
+
+    }
+
+
+    /* =========================================================
+       POST-COMMIT CLEANUP + RESPONSE
+       The write already succeeded at this point. Nothing from
+       here on can turn that into a reported failure — cleanup
+       and the re-fetch are both best-effort.
+    ========================================================= */
+
+
+    /* -----------------------------------------------------
+       DELETE OLD IMAGE (best-effort — logged, never fatal)
+    ----------------------------------------------------- */
+
+    if (
+        $newImageUploaded &&
+        !empty(
+            $existingHero['background_image']
+        ) &&
+        $existingHero['background_image']
+            !== $background_image
+    ) {
+
+        try {
 
             delete_old_image(
                 $existingHero['background_image'],
                 $uploadDir
             );
+
+        } catch (
+            Throwable $e
+        ) {
+
+            // Old file cleanup failing (already missing,
+            // permissions, etc.) must never be reported as
+            // an update failure — the write already succeeded.
+            error_log(
+                'Hero old-image cleanup warning: ' .
+                $e->getMessage()
+            );
+
+        }
+
+    }
+
+
+    /* -----------------------------------------------------
+       RE-FETCH UPDATED HERO + COUNTERS
+       (best-effort — falls back to values we already know
+       rather than reporting failure if this select fails)
+    ----------------------------------------------------- */
+
+    $updatedHero = null;
+
+    try {
+
+        $updatedStmt =
+            $conn->prepare("
+                SELECT *
+                FROM hero_section
+                WHERE id = ?
+                LIMIT 1
+            ");
+
+
+        if (!$updatedStmt) {
+
+            throw new Exception(
+                'Unable to prepare updated Hero query.'
+            );
         }
 
 
-        /* =====================================================
-           GET UPDATED HERO
-        ===================================================== */
-
-        $updatedStmt = $conn->prepare("
-            SELECT *
-            FROM hero_section
-            WHERE id = ?
-            LIMIT 1
-        ");
-
         $updatedStmt->bind_param(
-            "i",
+            'i',
             $id
         );
 
-        $updatedStmt->execute();
+
+        if (
+            !$updatedStmt->execute()
+        ) {
+
+            $updatedStmt->close();
+
+            throw new Exception(
+                'Unable to load updated Hero.'
+            );
+        }
+
 
         $updatedResult =
             $updatedStmt->get_result();
 
+
         $updatedHero =
             $updatedResult->fetch_assoc();
+
 
         $updatedStmt->close();
 
 
-        /* -----------------------------------------------------
-           Get updated counters
-        ----------------------------------------------------- */
+        $updatedCounterResult =
+            $conn->query("
+                SELECT
+                    id,
+                    icon,
+                    value,
+                    label,
+                    display_order
+                FROM counters
+                WHERE section_key = 'hero'
+                ORDER BY display_order ASC, id ASC
+            ");
 
-        $updatedCounterResult = $conn->query("
-            SELECT
-                id,
-                icon,
-                value,
-                label,
-                display_order
-            FROM counters
-            WHERE section_key = 'hero'
-            ORDER BY display_order ASC, id ASC
-        ");
+
+        if (
+            !$updatedCounterResult
+        ) {
+
+            throw new Exception(
+                'Unable to load updated counters.'
+            );
+        }
 
 
         $updatedCounters = [];
@@ -727,7 +910,9 @@ if ($method === 'POST') {
                 $updatedCounterResult->fetch_assoc()
         ) {
 
-            $updatedCounters[] = $counter;
+            $updatedCounters[] =
+                $counter;
+
         }
 
 
@@ -735,54 +920,49 @@ if ($method === 'POST') {
             $updatedCounters;
 
 
-        /* =====================================================
-           RESPONSE
-        ===================================================== */
+    } catch (
+        Throwable $e
+    ) {
 
-        json_response([
-            "success" => true,
-            "message" =>
-                "Hero section and statistics updated successfully.",
-            "data" => $updatedHero
-        ]);
-        
-
-    } catch (Exception $e) {
-
-        /* =====================================================
-           ROLLBACK
-        ===================================================== */
-
-        $conn->rollback();
+        error_log(
+            'Hero post-update fetch warning: ' .
+            $e->getMessage()
+        );
 
 
-        /*
-         * If a new image was uploaded but database update
-         * failed, remove the new image because it is not
-         * referenced by the database.
-         */
+        // Fall back to what we already know was written,
+        // rather than failing a request whose write succeeded.
+        $updatedHero = array_merge(
+            $existingHero,
+            [
+                'id'                 => $id,
+                'badge_text'         => $badge_text,
+                'title_text'         => $title_text,
+                'title_highlight'    => $title_highlight,
+                'subtitle'           => $subtitle,
+                'primary_btn_text'   => $primary_btn_text,
+                'primary_btn_link'   => $primary_btn_link,
+                'secondary_btn_text' => $secondary_btn_text,
+                'secondary_btn_link' => $secondary_btn_link,
+                'background_image'   => $background_image,
+                'counters'           => [],
+            ]
+        );
 
-        if (
-            $newImageUploaded &&
-            $newImageFilename
-        ) {
-
-            $newImagePath =
-                rtrim($uploadDir, '/\\') .
-                DIRECTORY_SEPARATOR .
-                $newImageFilename;
-
-            if (is_file($newImagePath)) {
-                @unlink($newImagePath);
-            }
-        }
-
-
-        json_response([
-            "success" => false,
-            "error" => $e->getMessage()
-        ], 500);
     }
+
+
+    /* =================================================
+       SUCCESS
+    ================================================= */
+
+    admin_success([
+        'message' =>
+            'Hero section and statistics updated successfully.',
+
+        'data' =>
+            $updatedHero
+    ]);
 }
 
 
@@ -790,7 +970,11 @@ if ($method === 'POST') {
    METHOD NOT ALLOWED
 ========================================================= */
 
-json_response([
-    "success" => false,
-    "error" => "Method not allowed."
-], 405);
+header(
+    'Allow: GET, POST'
+);
+
+admin_error(
+    'Method not allowed.',
+    405
+);

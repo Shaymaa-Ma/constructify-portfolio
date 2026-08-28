@@ -1,35 +1,125 @@
+
 <?php
 
 /**
  * /Server/api/admin/services/index.php
  *
- * Services Section
+ * SERVICES SECTION API
  *
  * GET:
- *   Returns services section + services counters
+ *   /admin/services/index.php
+ *      -> Get Services section + counters
  *
  * PUT / PATCH:
- *   Updates services section text/content + panel image
- *   Also updates services counters
+ *   JSON body
+ *      -> Update section without image
  *
- * Image upload:
- *   panel_image is uploaded using multipart/form-data
+ * POST + _method=PUT:
+ *   multipart/form-data
+ *      -> Update section with image
+ *
+ * Services section is EDIT ONLY.
+ * No CREATE.
+ * No DELETE.
  */
 
-require_once __DIR__ . '/../../_bootstrap.php';
+require_once __DIR__ . '/../_bootstrap.php';
 
 header("Content-Type: application/json; charset=utf-8");
 
-$method = $_SERVER['REQUEST_METHOD'];
+
+/* =========================================================
+   REQUEST METHOD
+========================================================= */
+
+$method = strtoupper($_SERVER['REQUEST_METHOD']);
+
+
+/*
+ * For multipart/form-data we use:
+ *
+ * POST + _method=PUT
+ *
+ * because PHP handles multipart uploads through POST.
+ *
+ * This keeps the frontend compatible with normal PHP
+ * file-upload handling.
+ */
+
+if (
+    $method === 'POST' &&
+    isset($_POST['_method'])
+) {
+
+    $requestedMethod =
+        strtoupper(trim((string)$_POST['_method']));
+
+    if (
+        $requestedMethod === 'PUT' ||
+        $requestedMethod === 'PATCH'
+    ) {
+        $method = $requestedMethod;
+    }
+}
 
 
 /* =========================================================
    UPLOAD CONFIGURATION
 ========================================================= */
 
-$uploadDir = __DIR__ . '/../../../uploads/services/';
+/*
+ * Current structure:
+ *
+ * construction-portfolio/
+ * ├── Server/
+ * │   └── api/
+ * │       └── admin/
+ * │           └── services/
+ * │               └── index.php
+ * │
+ * └── uploads/
+ *     └── services/
+ *
+ * From services/index.php:
+ *
+ * __DIR__
+ *   services
+ *
+ * ../../../
+ *   Server
+ *
+ * ../../../../
+ *   construction-portfolio
+ */
 
-$uploadUrl = '/construction-portfolio/uploads/services/';
+$uploadDir =
+    dirname(__DIR__, 4) .
+    '/uploads/services';
+
+
+$uploadUrl =
+    '/construction-portfolio/uploads/services';
+
+
+/* =========================================================
+   HELPER
+========================================================= */
+
+function send_json(
+    array $data,
+    int $status = 200
+): void {
+
+    http_response_code($status);
+
+    echo json_encode(
+        $data,
+        JSON_UNESCAPED_SLASHES |
+        JSON_UNESCAPED_UNICODE
+    );
+
+    exit;
+}
 
 
 /* =========================================================
@@ -38,8 +128,9 @@ $uploadUrl = '/construction-portfolio/uploads/services/';
 
 if ($method === 'GET') {
 
+
     /* -----------------------------------------------------
-       Get Services Section
+       GET SECTION
     ----------------------------------------------------- */
 
     $result = $conn->query("
@@ -49,36 +140,32 @@ if ($method === 'GET') {
         LIMIT 1
     ");
 
+
     if (!$result) {
 
-        http_response_code(500);
-
-        echo json_encode([
+        send_json([
             "success" => false,
             "error" => $conn->error
-        ]);
-
-        exit;
+        ], 500);
     }
 
-    $section = $result->fetch_assoc();
+
+    $section =
+        $result->fetch_assoc();
 
 
     if (!$section) {
 
-        http_response_code(404);
-
-        echo json_encode([
+        send_json([
             "success" => false,
-            "error" => "Services section not found."
-        ]);
-
-        exit;
+            "error" =>
+                "Services section not found."
+        ], 404);
     }
 
 
     /* -----------------------------------------------------
-       Get Services Counters
+       GET COUNTERS
     ----------------------------------------------------- */
 
     $counterResult = $conn->query("
@@ -94,314 +181,640 @@ if ($method === 'GET') {
         ORDER BY display_order ASC, id ASC
     ");
 
+
     if (!$counterResult) {
 
-        http_response_code(500);
-
-        echo json_encode([
+        send_json([
             "success" => false,
             "error" => $conn->error
-        ]);
-
-        exit;
+        ], 500);
     }
 
 
     $counters = [];
 
-    while ($counter = $counterResult->fetch_assoc()) {
+
+    while (
+        $counter =
+        $counterResult->fetch_assoc()
+    ) {
+
         $counters[] = $counter;
     }
 
 
     /* -----------------------------------------------------
-       Return Section + Counters
+       IMAGE URL
     ----------------------------------------------------- */
 
-    echo json_encode([
+    $panelImage =
+        $section['panel_image'] ?? '';
+
+
+    $panelImageUrl = null;
+
+
+    if ($panelImage !== '') {
+
+        /*
+         * If database already contains a full URL,
+         * preserve it.
+         */
+
+        if (
+            str_starts_with(
+                $panelImage,
+                'http://'
+            ) ||
+            str_starts_with(
+                $panelImage,
+                'https://'
+            ) ||
+            str_starts_with(
+                $panelImage,
+                '/'
+            )
+        ) {
+
+            $panelImageUrl =
+                $panelImage;
+
+        } else {
+
+            $panelImageUrl =
+                $uploadUrl .
+                '/' .
+                ltrim(
+                    $panelImage,
+                    '/'
+                );
+        }
+    }
+
+
+    /* -----------------------------------------------------
+       RESPONSE
+    ----------------------------------------------------- */
+
+    send_json([
         "success" => true,
         "data" => $section,
-        "counters" => $counters
+        "counters" => $counters,
+        "image_url" => $panelImageUrl
     ]);
-
-    exit;
 }
 
 
 /* =========================================================
-   UPDATE SERVICES SECTION + IMAGE + COUNTERS
+   UPDATE SERVICES SECTION
 ========================================================= */
 
-if ($method === 'PUT' || $method === 'PATCH') {
+if (
+    $method === 'PUT' ||
+    $method === 'PATCH'
+) {
+
+    /*
+     * Only authenticated admins can update.
+     */
 
     require_auth();
 
 
-    /* -----------------------------------------------------
-       Read normal fields
-    ----------------------------------------------------- */
+    /* =====================================================
+       READ INPUT
+    ===================================================== */
 
-    $id = (int)($_POST['id'] ?? 1);
+    $contentType =
+        $_SERVER['CONTENT_TYPE'] ??
+        $_SERVER['HTTP_CONTENT_TYPE'] ??
+        '';
 
-    if ($id <= 0) {
 
-        http_response_code(422);
+    $input = [];
 
-        echo json_encode([
-            "success" => false,
-            "error" => "Valid Services section ID is required."
-        ]);
 
-        exit;
+    /*
+     * Multipart request
+     *
+     * React sends:
+     *
+     * POST
+     * Content-Type: multipart/form-data
+     *
+     * _method=PUT
+     */
+
+    if (
+        stripos(
+            $contentType,
+            'multipart/form-data'
+        ) !== false
+    ) {
+
+        $input = $_POST;
+
+    } else {
+
+        /*
+         * JSON request
+         */
+
+        $rawBody =
+            file_get_contents(
+                "php://input"
+            );
+
+
+        if (
+            $rawBody !== false &&
+            trim($rawBody) !== ''
+        ) {
+
+            $decoded =
+                json_decode(
+                    $rawBody,
+                    true
+                );
+
+
+            if (
+                is_array($decoded)
+            ) {
+
+                $input = $decoded;
+            }
+        }
     }
-
-
-    $title =
-        trim($_POST['title'] ?? '');
-
-    $subtitle =
-        trim($_POST['subtitle'] ?? '');
-
-    $panel_title =
-        trim($_POST['panel_title'] ?? '');
-
-    $panel_btn_text =
-        trim($_POST['panel_btn_text'] ?? '');
-
-    $panel_btn_link =
-        trim($_POST['panel_btn_link'] ?? '');
-
-    $stats_badge_text =
-        trim($_POST['stats_badge_text'] ?? '');
-
-    $stats_title =
-        trim($_POST['stats_title'] ?? '');
-
-    $stats_description =
-        trim($_POST['stats_description'] ?? '');
-
-    $stats_btn_text =
-        trim($_POST['stats_btn_text'] ?? '');
-
-    $stats_btn_link =
-        trim($_POST['stats_btn_link'] ?? '');
-
-
-    /* -----------------------------------------------------
-       Get current image
-    ----------------------------------------------------- */
-
-    $currentStmt = $conn->prepare("
-        SELECT panel_image
-        FROM services_section
-        WHERE id = ?
-        LIMIT 1
-    ");
-
-    if (!$currentStmt) {
-
-        http_response_code(500);
-
-        echo json_encode([
-            "success" => false,
-            "error" => $conn->error
-        ]);
-
-        exit;
-    }
-
-    $currentStmt->bind_param("i", $id);
-    $currentStmt->execute();
-
-    $currentResult = $currentStmt->get_result();
-    $currentSection = $currentResult->fetch_assoc();
-
-    $currentStmt->close();
-
-
-    if (!$currentSection) {
-
-        http_response_code(404);
-
-        echo json_encode([
-            "success" => false,
-            "error" => "Services section not found."
-        ]);
-
-        exit;
-    }
-
-
-    $panelImage = $currentSection['panel_image'];
 
 
     /* =====================================================
-       HANDLE NEW PANEL IMAGE
+       SECTION ID
+    ===================================================== */
+
+    $id =
+        isset($_GET['id'])
+            ? (int)$_GET['id']
+            : (int)($input['id'] ?? 0);
+
+
+    /*
+     * Your services section normally has one row.
+     * If the frontend doesn't send an ID, use 1.
+     */
+
+    if ($id <= 0) {
+        $id = 1;
+    }
+
+
+    /* =====================================================
+       GET EXISTING SECTION
+    ===================================================== */
+
+    $existingStmt =
+        $conn->prepare("
+            SELECT *
+            FROM services_section
+            WHERE id = ?
+            LIMIT 1
+        ");
+
+
+    if (!$existingStmt) {
+
+        send_json([
+            "success" => false,
+            "error" => $conn->error
+        ], 500);
+    }
+
+
+    $existingStmt->bind_param(
+        "i",
+        $id
+    );
+
+
+    $existingStmt->execute();
+
+
+    $existingResult =
+        $existingStmt->get_result();
+
+
+    $existing =
+        $existingResult->fetch_assoc();
+
+
+    $existingStmt->close();
+
+
+    if (!$existing) {
+
+        send_json([
+            "success" => false,
+            "error" =>
+                "Services section not found."
+        ], 404);
+    }
+
+
+    /* =====================================================
+       SECTION FIELDS
+    ===================================================== */
+
+    /*
+     * IMPORTANT:
+     *
+     * If a field is not supplied,
+     * keep the current database value.
+     */
+
+    $title =
+        array_key_exists(
+            'title',
+            $input
+        )
+            ? trim(
+                (string)$input['title']
+            )
+            : ($existing['title'] ?? '');
+
+
+    $subtitle =
+        array_key_exists(
+            'subtitle',
+            $input
+        )
+            ? trim(
+                (string)$input['subtitle']
+            )
+            : ($existing['subtitle'] ?? '');
+
+
+    $panelTitle =
+        array_key_exists(
+            'panel_title',
+            $input
+        )
+            ? trim(
+                (string)$input['panel_title']
+            )
+            : ($existing['panel_title'] ?? '');
+
+
+    $panelBtnText =
+        array_key_exists(
+            'panel_btn_text',
+            $input
+        )
+            ? trim(
+                (string)$input['panel_btn_text']
+            )
+            : ($existing['panel_btn_text'] ?? '');
+
+
+    $panelBtnLink =
+        array_key_exists(
+            'panel_btn_link',
+            $input
+        )
+            ? trim(
+                (string)$input['panel_btn_link']
+            )
+            : ($existing['panel_btn_link'] ?? '');
+
+
+    $statsBadgeText =
+        array_key_exists(
+            'stats_badge_text',
+            $input
+        )
+            ? trim(
+                (string)$input['stats_badge_text']
+            )
+            : ($existing['stats_badge_text'] ?? '');
+
+
+    $statsTitle =
+        array_key_exists(
+            'stats_title',
+            $input
+        )
+            ? trim(
+                (string)$input['stats_title']
+            )
+            : ($existing['stats_title'] ?? '');
+
+
+    $statsDescription =
+        array_key_exists(
+            'stats_description',
+            $input
+        )
+            ? trim(
+                (string)$input['stats_description']
+            )
+            : ($existing['stats_description'] ?? '');
+
+
+    $statsBtnText =
+        array_key_exists(
+            'stats_btn_text',
+            $input
+        )
+            ? trim(
+                (string)$input['stats_btn_text']
+            )
+            : ($existing['stats_btn_text'] ?? '');
+
+
+    $statsBtnLink =
+        array_key_exists(
+            'stats_btn_link',
+            $input
+        )
+            ? trim(
+                (string)$input['stats_btn_link']
+            )
+            : ($existing['stats_btn_link'] ?? '');
+
+
+    /* =====================================================
+       IMAGE
+    ===================================================== */
+
+    $panelImage =
+        $existing['panel_image'] ?? '';
+
+
+    $oldPanelImage =
+        $panelImage;
+
+
+    $newUploadedFile = null;
+
+
+    /* =====================================================
+       IMAGE UPLOAD
     ===================================================== */
 
     if (
         isset($_FILES['panel_image']) &&
-        $_FILES['panel_image']['error'] !== UPLOAD_ERR_NO_FILE
+        is_array($_FILES['panel_image'])
     ) {
 
-        $file = $_FILES['panel_image'];
+        $file =
+            $_FILES['panel_image'];
 
 
-        /* -------------------------------------------------
-           Check upload error
-        ------------------------------------------------- */
+        /*
+         * If no file was selected,
+         * do nothing.
+         */
 
-        if ($file['error'] !== UPLOAD_ERR_OK) {
-
-            http_response_code(400);
-
-            echo json_encode([
-                "success" => false,
-                "error" => "Image upload failed."
-            ]);
-
-            exit;
-        }
+        if (
+            ($file['error'] ?? UPLOAD_ERR_NO_FILE)
+            !== UPLOAD_ERR_NO_FILE
+        ) {
 
 
-        /* -------------------------------------------------
-           Maximum size: 5 MB
-        ------------------------------------------------- */
+            /* ---------------------------------------------
+               UPLOAD ERROR
+            --------------------------------------------- */
 
-        if ($file['size'] > 5 * 1024 * 1024) {
+            if (
+                $file['error']
+                !== UPLOAD_ERR_OK
+            ) {
 
-            http_response_code(422);
-
-            echo json_encode([
-                "success" => false,
-                "error" => "Image must be smaller than 5 MB."
-            ]);
-
-            exit;
-        }
-
-
-        /* -------------------------------------------------
-           Validate MIME type
-        ------------------------------------------------- */
-
-        $allowedTypes = [
-            'image/jpeg' => 'jpg',
-            'image/png'  => 'png',
-            'image/webp' => 'webp'
-        ];
-
-        $finfo = new finfo(FILEINFO_MIME_TYPE);
-        $mimeType = $finfo->file($file['tmp_name']);
-
-
-        if (!isset($allowedTypes[$mimeType])) {
-
-            http_response_code(422);
-
-            echo json_encode([
-                "success" => false,
-                "error" => "Only JPG, PNG and WEBP images are allowed."
-            ]);
-
-            exit;
-        }
-
-
-        /* -------------------------------------------------
-           Create upload directory
-        ------------------------------------------------- */
-
-        if (!is_dir($uploadDir)) {
-
-            if (!mkdir($uploadDir, 0755, true)) {
-
-                http_response_code(500);
-
-                echo json_encode([
+                send_json([
                     "success" => false,
-                    "error" => "Could not create upload directory."
-                ]);
-
-                exit;
+                    "error" =>
+                        "Image upload failed."
+                ], 400);
             }
+
+
+            /* ---------------------------------------------
+               SIZE
+            --------------------------------------------- */
+
+            $maxFileSize =
+                5 * 1024 * 1024;
+
+
+            if (
+                $file['size'] >
+                $maxFileSize
+            ) {
+
+                send_json([
+                    "success" => false,
+                    "error" =>
+                        "Image is too large. Maximum size is 5 MB."
+                ], 422);
+            }
+
+
+            /* ---------------------------------------------
+               MIME
+            --------------------------------------------- */
+
+            $finfo =
+                new finfo(
+                    FILEINFO_MIME_TYPE
+                );
+
+
+            $mimeType =
+                $finfo->file(
+                    $file['tmp_name']
+                );
+
+
+            $allowedTypes = [
+                'image/jpeg' => 'jpg',
+                'image/png'  => 'png',
+                'image/webp' => 'webp',
+                'image/gif'  => 'gif',
+            ];
+
+
+            if (
+                !isset(
+                    $allowedTypes[$mimeType]
+                )
+            ) {
+
+                send_json([
+                    "success" => false,
+                    "error" =>
+                        "Invalid image type. Allowed formats: JPG, PNG, WEBP and GIF."
+                ], 422);
+            }
+
+
+            /* ---------------------------------------------
+               DIRECTORY
+            --------------------------------------------- */
+
+            if (
+                !is_dir($uploadDir)
+            ) {
+
+                if (
+                    !mkdir(
+                        $uploadDir,
+                        0755,
+                        true
+                    )
+                ) {
+
+                    send_json([
+                        "success" => false,
+                        "error" =>
+                            "Unable to create image upload directory."
+                    ], 500);
+                }
+            }
+
+
+            /* ---------------------------------------------
+               SAFE FILENAME
+            --------------------------------------------- */
+
+            $extension =
+                $allowedTypes[$mimeType];
+
+
+            $filename =
+                'services_panel_' .
+                bin2hex(
+                    random_bytes(8)
+                ) .
+                '.' .
+                $extension;
+
+
+            $destination =
+                rtrim(
+                    $uploadDir,
+                    DIRECTORY_SEPARATOR
+                ) .
+                DIRECTORY_SEPARATOR .
+                $filename;
+
+
+            /* ---------------------------------------------
+               MOVE FILE
+            --------------------------------------------- */
+
+            if (
+                !move_uploaded_file(
+                    $file['tmp_name'],
+                    $destination
+                )
+            ) {
+
+                send_json([
+                    "success" => false,
+                    "error" =>
+                        "Unable to save uploaded image."
+                ], 500);
+            }
+
+
+            /*
+             * Store only filename in database.
+             */
+
+            $panelImage =
+                $filename;
+
+
+            $newUploadedFile =
+                $destination;
         }
-
-
-        /* -------------------------------------------------
-           Generate unique filename
-        ------------------------------------------------- */
-
-        $extension = $allowedTypes[$mimeType];
-
-        $newFilename =
-            'services-panel-' .
-            bin2hex(random_bytes(8)) .
-            '.' .
-            $extension;
-
-
-        $destination =
-            $uploadDir . $newFilename;
-
-
-        /* -------------------------------------------------
-           Move uploaded file
-        ------------------------------------------------- */
-
-        if (!move_uploaded_file(
-            $file['tmp_name'],
-            $destination
-        )) {
-
-            http_response_code(500);
-
-            echo json_encode([
-                "success" => false,
-                "error" => "Could not save uploaded image."
-            ]);
-
-            exit;
-        }
-
-
-        /* -------------------------------------------------
-           Save new image filename
-        ------------------------------------------------- */
-
-        $panelImage = $newFilename;
     }
 
 
     /* =====================================================
-       GET COUNTERS FROM FORM
+       COUNTERS
     ===================================================== */
 
     $counters = [];
 
-    if (isset($_POST['counters'])) {
 
-        $decodedCounters =
-            json_decode($_POST['counters'], true);
+    if (
+        array_key_exists(
+            'counters',
+            $input
+        )
+    ) {
 
-        if (!is_array($decodedCounters)) {
+        /*
+         * FormData sends counters as JSON string.
+         */
 
-            http_response_code(422);
+        if (
+            is_string(
+                $input['counters']
+            )
+        ) {
 
-            echo json_encode([
-                "success" => false,
-                "error" => "Invalid counters data."
-            ]);
+            $decodedCounters =
+                json_decode(
+                    $input['counters'],
+                    true
+                );
 
-            exit;
+        } else {
+
+            /*
+             * JSON request may already
+             * contain an array.
+             */
+
+            $decodedCounters =
+                $input['counters'];
         }
 
-        $counters = $decodedCounters;
+
+        if (
+            !is_array(
+                $decodedCounters
+            )
+        ) {
+
+            /*
+             * Empty counters is allowed.
+             */
+
+            if (
+                trim(
+                    (string)$input['counters']
+                ) !== ''
+            ) {
+
+                send_json([
+                    "success" => false,
+                    "error" =>
+                        "Invalid counters data."
+                ], 422);
+            }
+
+        } else {
+
+            $counters =
+                $decodedCounters;
+        }
     }
 
 
     /* =====================================================
-       START TRANSACTION
+       TRANSACTION
     ===================================================== */
 
     $conn->begin_transaction();
@@ -409,29 +822,35 @@ if ($method === 'PUT' || $method === 'PATCH') {
 
     try {
 
+
         /* =================================================
-           UPDATE SERVICES SECTION
+           UPDATE SECTION
         ================================================= */
 
-        $stmt = $conn->prepare("
-            UPDATE services_section
-            SET
-                title = ?,
-                subtitle = ?,
-                panel_image = ?,
-                panel_title = ?,
-                panel_btn_text = ?,
-                panel_btn_link = ?,
-                stats_badge_text = ?,
-                stats_title = ?,
-                stats_description = ?,
-                stats_btn_text = ?,
-                stats_btn_link = ?
-            WHERE id = ?
-        ");
+        $stmt =
+            $conn->prepare("
+                UPDATE services_section
+                SET
+                    title = ?,
+                    subtitle = ?,
+                    panel_image = ?,
+                    panel_title = ?,
+                    panel_btn_text = ?,
+                    panel_btn_link = ?,
+                    stats_badge_text = ?,
+                    stats_title = ?,
+                    stats_description = ?,
+                    stats_btn_text = ?,
+                    stats_btn_link = ?
+                WHERE id = ?
+            ");
+
 
         if (!$stmt) {
-            throw new Exception($conn->error);
+
+            throw new Exception(
+                $conn->error
+            );
         }
 
 
@@ -440,20 +859,25 @@ if ($method === 'PUT' || $method === 'PATCH') {
             $title,
             $subtitle,
             $panelImage,
-            $panel_title,
-            $panel_btn_text,
-            $panel_btn_link,
-            $stats_badge_text,
-            $stats_title,
-            $stats_description,
-            $stats_btn_text,
-            $stats_btn_link,
+            $panelTitle,
+            $panelBtnText,
+            $panelBtnLink,
+            $statsBadgeText,
+            $statsTitle,
+            $statsDescription,
+            $statsBtnText,
+            $statsBtnLink,
             $id
         );
 
 
-        if (!$stmt->execute()) {
-            throw new Exception($stmt->error);
+        if (
+            !$stmt->execute()
+        ) {
+
+            throw new Exception(
+                $stmt->error
+            );
         }
 
 
@@ -464,45 +888,82 @@ if ($method === 'PUT' || $method === 'PATCH') {
            UPDATE COUNTERS
         ================================================= */
 
-        if (!empty($counters)) {
+        if (
+            !empty($counters)
+        ) {
 
-            $counterStmt = $conn->prepare("
-                UPDATE counters
-                SET
-                    icon = ?,
-                    value = ?,
-                    label = ?,
-                    display_order = ?
-                WHERE id = ?
-                  AND section_key = 'services'
-            ");
+            $counterStmt =
+                $conn->prepare("
+                    UPDATE counters
+                    SET
+                        icon = ?,
+                        value = ?,
+                        label = ?,
+                        display_order = ?
+                    WHERE id = ?
+                      AND section_key = 'services'
+                ");
+
 
             if (!$counterStmt) {
-                throw new Exception($conn->error);
+
+                throw new Exception(
+                    $conn->error
+                );
             }
 
 
-            foreach ($counters as $counter) {
+            foreach (
+                $counters
+                as $counter
+            ) {
 
                 $counterId =
-                    (int)($counter['id'] ?? 0);
+                    (int)(
+                        $counter['id']
+                        ?? 0
+                    );
 
-                if ($counterId <= 0) {
+
+                if (
+                    $counterId <= 0
+                ) {
                     continue;
                 }
 
 
                 $icon =
-                    trim($counter['icon'] ?? '');
+                    trim(
+                        (string)(
+                            $counter['icon']
+                            ?? ''
+                        )
+                    );
+
 
                 $value =
-                    trim($counter['value'] ?? '');
+                    trim(
+                        (string)(
+                            $counter['value']
+                            ?? ''
+                        )
+                    );
+
 
                 $label =
-                    trim($counter['label'] ?? '');
+                    trim(
+                        (string)(
+                            $counter['label']
+                            ?? ''
+                        )
+                    );
+
 
                 $displayOrder =
-                    (int)($counter['display_order'] ?? 0);
+                    (int)(
+                        $counter['display_order']
+                        ?? 0
+                    );
 
 
                 $counterStmt->bind_param(
@@ -515,7 +976,10 @@ if ($method === 'PUT' || $method === 'PATCH') {
                 );
 
 
-                if (!$counterStmt->execute()) {
+                if (
+                    !$counterStmt->execute()
+                ) {
+
                     throw new Exception(
                         $counterStmt->error
                     );
@@ -534,29 +998,193 @@ if ($method === 'PUT' || $method === 'PATCH') {
         $conn->commit();
 
 
-        echo json_encode([
+        /* =================================================
+           DELETE OLD IMAGE
+        ================================================= */
+
+        if (
+            $newUploadedFile &&
+            $oldPanelImage &&
+            $oldPanelImage !== $panelImage
+        ) {
+
+            /*
+             * Database should contain only filename,
+             * but this also safely handles an old full path.
+             */
+
+            $oldFilename =
+                basename(
+                    parse_url(
+                        $oldPanelImage,
+                        PHP_URL_PATH
+                    )
+                    ?: $oldPanelImage
+                );
+
+
+            if (
+                $oldFilename
+            ) {
+
+                $oldPath =
+                    rtrim(
+                        $uploadDir,
+                        DIRECTORY_SEPARATOR
+                    ) .
+                    DIRECTORY_SEPARATOR .
+                    $oldFilename;
+
+
+                if (
+                    is_file(
+                        $oldPath
+                    )
+                ) {
+
+                    @unlink(
+                        $oldPath
+                    );
+                }
+            }
+        }
+
+
+        /* =================================================
+           GET UPDATED SECTION
+        ================================================= */
+
+        $updatedStmt =
+            $conn->prepare("
+                SELECT *
+                FROM services_section
+                WHERE id = ?
+                LIMIT 1
+            ");
+
+
+        if (!$updatedStmt) {
+
+            throw new Exception(
+                $conn->error
+            );
+        }
+
+
+        $updatedStmt->bind_param(
+            "i",
+            $id
+        );
+
+
+        $updatedStmt->execute();
+
+
+        $updatedResult =
+            $updatedStmt->get_result();
+
+
+        $updatedSection =
+            $updatedResult->fetch_assoc();
+
+
+        $updatedStmt->close();
+
+
+        /* =================================================
+           IMAGE URL
+        ================================================= */
+
+        $updatedImage =
+            $updatedSection['panel_image']
+            ?? '';
+
+
+        $imageUrl = null;
+
+
+        if (
+            $updatedImage !== ''
+        ) {
+
+            if (
+                str_starts_with(
+                    $updatedImage,
+                    'http://'
+                ) ||
+                str_starts_with(
+                    $updatedImage,
+                    'https://'
+                ) ||
+                str_starts_with(
+                    $updatedImage,
+                    '/'
+                )
+            ) {
+
+                $imageUrl =
+                    $updatedImage;
+
+            } else {
+
+                $imageUrl =
+                    $uploadUrl .
+                    '/' .
+                    ltrim(
+                        $updatedImage,
+                        '/'
+                    );
+            }
+        }
+
+
+        /* =================================================
+           RESPONSE
+        ================================================= */
+
+        send_json([
             "success" => true,
             "message" =>
-                "Services section and statistics updated successfully.",
-            "panel_image" => $panelImage,
+                "Services section updated successfully.",
+            "data" =>
+                $updatedSection,
+            "counters" =>
+                $counters,
             "image_url" =>
-                $uploadUrl . $panelImage
+                $imageUrl
         ]);
 
-        exit;
 
-    } catch (Exception $e) {
+    } catch (
+        Throwable $e
+    ) {
 
         $conn->rollback();
 
-        http_response_code(500);
 
-        echo json_encode([
+        /*
+         * If DB update failed after uploading
+         * the new image, remove the new file.
+         */
+
+        if (
+            $newUploadedFile &&
+            is_file(
+                $newUploadedFile
+            )
+        ) {
+
+            @unlink(
+                $newUploadedFile
+            );
+        }
+
+
+        send_json([
             "success" => false,
-            "error" => $e->getMessage()
-        ]);
-
-        exit;
+            "error" =>
+                $e->getMessage()
+        ], 500);
     }
 }
 
@@ -565,9 +1193,8 @@ if ($method === 'PUT' || $method === 'PATCH') {
    METHOD NOT ALLOWED
 ========================================================= */
 
-http_response_code(405);
-
-echo json_encode([
+send_json([
     "success" => false,
-    "error" => "Only GET and PUT/PATCH are allowed."
-]);
+    "error" =>
+        "Method not allowed."
+], 405);

@@ -1,11 +1,18 @@
 
 import React, { useEffect, useState } from "react";
-import { servicesApi } from "../api/adminApi";
 
-const IMAGE_BASE =
-  import.meta.env?.VITE_UPLOADS_BASE_URL || "/uploads";
+import {
+  servicesApi,
+  getImageUrl,
+} from "../api/adminApi";
+
 
 export default function Services() {
+
+  /* =========================================================
+     STATE
+  ========================================================= */
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -16,11 +23,15 @@ export default function Services() {
   ========================================================= */
 
   const [form, setForm] = useState({
+    id: 1,
+
     title: "",
     subtitle: "",
+
     panel_title: "",
     panel_btn_text: "",
     panel_btn_link: "",
+
     stats_badge_text: "",
     stats_title: "",
     stats_description: "",
@@ -28,14 +39,23 @@ export default function Services() {
     stats_btn_link: "",
   });
 
-  const [currentPanelImage, setCurrentPanelImage] =
-    useState(null);
+  /* =========================================================
+     CURRENT IMAGE
+  ========================================================= */
 
-  const [newPanelImage, setNewPanelImage] =
-    useState(null);
+  const [currentPanelImage, setCurrentPanelImage] = useState(null);
 
-  const [panelPreview, setPanelPreview] =
-    useState(null);
+  /* =========================================================
+     NEW IMAGE
+  ========================================================= */
+
+  const [newPanelImage, setNewPanelImage] = useState(null);
+
+  /* =========================================================
+     IMAGE PREVIEW
+  ========================================================= */
+
+  const [panelPreview, setPanelPreview] = useState(null);
 
   /* =========================================================
      SERVICES ITEMS
@@ -45,85 +65,176 @@ export default function Services() {
   const [serviceSaving, setServiceSaving] = useState(null);
 
   /* =========================================================
-     LOAD DATA
+     LOAD ON MOUNT
   ========================================================= */
 
   useEffect(() => {
-    load();
+    loadServices();
+
+    return () => {
+      if (panelPreview) {
+        URL.revokeObjectURL(panelPreview);
+      }
+    };
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function load() {
+  /* =========================================================
+     LOAD SERVICES SECTION + ITEMS
+  ========================================================= */
+
+  async function loadServices() {
+
     setLoading(true);
     setError("");
 
     try {
-      const [sectionResponse, servicesList] =
-        await Promise.all([
-          servicesApi.getSection(),
-          servicesApi.items.list(),
-        ]);
+
+      /* =====================================================
+         LOAD SERVICES SECTION
+      ===================================================== */
+
+      const response = await servicesApi.get();
+
+      console.log("SERVICES API RESPONSE:", response);
 
       /*
-       * Support all common backend response structures:
+       * Axios response:
        *
-       * { success: true, data: {...} }
-       * { success: true, section: {...} }
-       * {...}
+       * response
+       *   └── data
+       *        ├── success
+       *        ├── data       <-- actual section
+       *        ├── counters
+       *        └── image_url
+       *
+       * Therefore:
+       *
+       * response.data.data
        */
+
+      const apiResponse =
+        response?.data ?? response ?? {};
 
       const section =
-        sectionResponse?.data ||
-        sectionResponse?.section ||
-        sectionResponse ||
-        {};
+        apiResponse?.data ?? apiResponse ?? {};
+
+      console.log("SERVICES SECTION:", section);
+
+      /* =====================================================
+         FORM
+      ===================================================== */
 
       setForm({
-        title: section.title || "",
-        subtitle: section.subtitle || "",
-        panel_title: section.panel_title || "",
-        panel_btn_text: section.panel_btn_text || "",
-        panel_btn_link: section.panel_btn_link || "",
+        id: section.id ?? 1,
+
+        title: section.title ?? "",
+        subtitle: section.subtitle ?? "",
+
+        panel_title: section.panel_title ?? "",
+        panel_btn_text: section.panel_btn_text ?? "",
+        panel_btn_link: section.panel_btn_link ?? "",
+
         stats_badge_text:
-          section.stats_badge_text || "",
-        stats_title: section.stats_title || "",
+          section.stats_badge_text ?? "",
+
+        stats_title:
+          section.stats_title ?? "",
+
         stats_description:
-          section.stats_description || "",
-        stats_btn_text: section.stats_btn_text || "",
-        stats_btn_link: section.stats_btn_link || "",
+          section.stats_description ?? "",
+
+        stats_btn_text:
+          section.stats_btn_text ?? "",
+
+        stats_btn_link:
+          section.stats_btn_link ?? "",
       });
 
+      /* =====================================================
+         IMAGE
+      ===================================================== */
+
       setCurrentPanelImage(
-        section.panel_image || null
+        section.panel_image ||
+        apiResponse.image_url ||
+        null
       );
 
-      /*
-       * servicesApi.items.list() already returns:
-       *
-       * res.data || []
-       */
-      setServices(
-        Array.isArray(servicesList)
-          ? servicesList
-          : []
-      );
+      /* =====================================================
+         LOAD SERVICE ITEMS
+      ===================================================== */
+
+      if (
+        servicesApi.items &&
+        typeof servicesApi.items.list === "function"
+      ) {
+
+        const servicesResponse =
+          await servicesApi.items.list();
+
+        /*
+         * Support both:
+         *
+         * Axios:
+         * response.data.data
+         *
+         * Direct array:
+         * [...]
+         */
+
+        const servicesData =
+          servicesResponse?.data?.data ??
+          servicesResponse?.data ??
+          servicesResponse ??
+          [];
+
+        setServices(
+          Array.isArray(servicesData)
+            ? servicesData
+            : []
+        );
+
+      } else {
+
+        setServices([]);
+
+      }
+
     } catch (err) {
-      setError(
-        err?.message ||
-          "Failed to load Services."
+
+      console.error(
+        "Services load error:",
+        err
       );
+
+      setError(
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        err?.message ||
+        "Failed to load Services section."
+      );
+
     } finally {
+
       setLoading(false);
+
     }
   }
 
   /* =========================================================
-     HANDLE SECTION INPUT
+     HANDLE SECTION FIELD CHANGE
   ========================================================= */
 
   function handleChange(e) {
-    const { name, value } = e.target;
 
-    setForm((previous) => ({
+    const {
+      name,
+      value,
+    } = e.target;
+
+    setForm(previous => ({
       ...previous,
       [name]: value,
     }));
@@ -133,49 +244,43 @@ export default function Services() {
   }
 
   /* =========================================================
-     IMAGE URL
+     IMAGE PICK
   ========================================================= */
 
-  function getImageUrl(image) {
-    if (!image) {
-      return null;
-    }
+  function handleImagePick(e) {
 
-    if (
-      image.startsWith("http://") ||
-      image.startsWith("https://") ||
-      image.startsWith("/")
-    ) {
-      return image;
-    }
-
-    return `${IMAGE_BASE}/${image}`;
-  }
-
-  /* =========================================================
-     PICK PANEL IMAGE
-  ========================================================= */
-
-  function pickPanelImage(e) {
     const file = e.target.files?.[0];
 
     if (!file) {
       return;
     }
 
-    /*
-     * Basic image validation.
-     */
-    if (!file.type.startsWith("image/")) {
-      setError("Please select a valid image file.");
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/gif",
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+
+      setError(
+        "Only JPG, PNG, WEBP and GIF images are allowed."
+      );
+
+      e.target.value = "";
+
       return;
     }
 
-    /*
-     * Limit to 5 MB.
-     */
     if (file.size > 5 * 1024 * 1024) {
-      setError("Image size must be less than 5 MB.");
+
+      setError(
+        "Image size must be less than 5 MB."
+      );
+
+      e.target.value = "";
+
       return;
     }
 
@@ -183,10 +288,30 @@ export default function Services() {
       URL.revokeObjectURL(panelPreview);
     }
 
-    const previewUrl = URL.createObjectURL(file);
+    const previewUrl =
+      URL.createObjectURL(file);
 
     setNewPanelImage(file);
     setPanelPreview(previewUrl);
+
+    setError("");
+    setSuccess("");
+
+    e.target.value = "";
+  }
+
+  /* =========================================================
+     REMOVE NEW IMAGE
+  ========================================================= */
+
+  function removeNewImage() {
+
+    if (panelPreview) {
+      URL.revokeObjectURL(panelPreview);
+    }
+
+    setNewPanelImage(null);
+    setPanelPreview(null);
 
     setError("");
     setSuccess("");
@@ -196,71 +321,153 @@ export default function Services() {
      SAVE SERVICES SECTION
   ========================================================= */
 
-  async function handleSectionSave(e) {
+  async function handleSave(e) {
+
     e.preventDefault();
+
+    if (saving) {
+      return;
+    }
 
     setSaving(true);
     setError("");
     setSuccess("");
 
     try {
+
       /*
-       * The current adminApi.js sends JSON.
+       * IMPORTANT:
        *
-       * Therefore only the text fields are saved here.
-       * The selected image is only previewed.
+       * Your PHP backend expects these exact names.
        */
-      await servicesApi.updateSection({
+
+      const fields = {
+        id: form.id ?? 1,
+
         title: form.title,
         subtitle: form.subtitle,
+
         panel_title: form.panel_title,
         panel_btn_text: form.panel_btn_text,
         panel_btn_link: form.panel_btn_link,
-        stats_badge_text: form.stats_badge_text,
-        stats_title: form.stats_title,
-        stats_description: form.stats_description,
-        stats_btn_text: form.stats_btn_text,
-        stats_btn_link: form.stats_btn_link,
-      });
 
-      setSuccess(
-        "Services section updated successfully."
+        stats_badge_text:
+          form.stats_badge_text,
+
+        stats_title:
+          form.stats_title,
+
+        stats_description:
+          form.stats_description,
+
+        stats_btn_text:
+          form.stats_btn_text,
+
+        stats_btn_link:
+          form.stats_btn_link,
+      };
+
+      /*
+       * If an image was selected,
+       * servicesApi.update() must convert
+       * this object into FormData.
+       */
+
+      if (newPanelImage) {
+        fields.panel_image = newPanelImage;
+      }
+
+      console.log(
+        "SERVICES SAVE DATA:",
+        fields
       );
 
-      setNewPanelImage(null);
+      const response =
+        await servicesApi.update(fields);
+
+      console.log(
+        "SERVICES SAVE RESPONSE:",
+        response
+      );
+
+      /*
+       * Axios response:
+       *
+       * response.data = PHP JSON
+       */
+
+      const result =
+        response?.data ?? response ?? {};
+
+      if (result.success === false) {
+
+        throw new Error(
+          result.error ||
+          result.message ||
+          "Services section update failed."
+        );
+      }
+
+      setSuccess(
+        result.message ||
+        (
+          newPanelImage
+            ? "Services section and image updated successfully."
+            : "Services section updated successfully."
+        )
+      );
+
+      /* =====================================================
+         CLEAN PREVIEW
+      ===================================================== */
 
       if (panelPreview) {
         URL.revokeObjectURL(panelPreview);
       }
 
+      setNewPanelImage(null);
       setPanelPreview(null);
 
-      /*
-       * Reload saved database values.
-       */
-      await load();
+      /* =====================================================
+         RELOAD FROM DATABASE
+      ===================================================== */
+
+      await loadServices();
+
     } catch (err) {
-      setError(
-        err?.message ||
-          "Failed to update Services section."
+
+      console.error(
+        "Services save error:",
+        err
       );
+
+      setError(
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        err?.message ||
+        "Unable to update Services section."
+      );
+
     } finally {
+
       setSaving(false);
+
     }
   }
 
   /* =========================================================
-     SERVICE FIELD CHANGE
+     SERVICE ITEM CHANGE
   ========================================================= */
 
-  function handleServiceFieldChange(
-    id,
+  function handleServiceChange(
+    index,
     field,
     value
   ) {
-    setServices((previous) =>
-      previous.map((service) =>
-        String(service.id) === String(id)
+
+    setServices(previous =>
+      previous.map((service, i) =>
+        i === index
           ? {
               ...service,
               [field]:
@@ -283,45 +490,93 @@ export default function Services() {
   ========================================================= */
 
   async function handleServiceSave(service) {
+
+    if (!service?.id) {
+
+      setError(
+        "Service ID is missing."
+      );
+
+      return;
+    }
+
+    if (serviceSaving === service.id) {
+      return;
+    }
+
     setServiceSaving(service.id);
+
     setError("");
     setSuccess("");
 
     try {
-      await servicesApi.items.update(
-        service.id,
-        {
-          icon: service.icon || "",
-          title: service.title || "",
-          description: service.description || "",
-          display_order:
-            service.display_order === ""
-              ? 0
-              : Number(service.display_order),
-        }
-      );
+
+      const response =
+        await servicesApi.items.update(
+          service.id,
+          {
+            icon: service.icon || "",
+            title: service.title || "",
+            description:
+              service.description || "",
+            display_order:
+              Number(
+                service.display_order
+              ) || 0,
+          }
+        );
+
+      const result =
+        response?.data ?? response ?? {};
+
+      if (result.success === false) {
+
+        throw new Error(
+          result.error ||
+          result.message ||
+          "Failed to update service."
+        );
+      }
 
       setSuccess(
         `"${service.title || "Service"}" updated successfully.`
       );
 
-      /*
-       * Reload services from database.
-       */
-      const updatedServices =
+      /* ===================================================
+         RELOAD ITEMS
+      =================================================== */
+
+      const updatedResponse =
         await servicesApi.items.list();
 
+      const updatedData =
+        updatedResponse?.data?.data ??
+        updatedResponse?.data ??
+        updatedResponse ??
+        [];
+
       setServices(
-        Array.isArray(updatedServices)
-          ? updatedServices
+        Array.isArray(updatedData)
+          ? updatedData
           : []
       );
+
     } catch (err) {
-      setError(
-        err?.message ||
-          "Failed to update service."
+
+      console.error(
+        "Service update error:",
+        err
       );
+
+      setError(
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        err?.message ||
+        "Failed to update service."
+      );
+
     } finally {
+
       setServiceSaving(null);
     }
   }
@@ -331,8 +586,10 @@ export default function Services() {
   ========================================================= */
 
   if (loading) {
+
     return (
       <div className="loading-state">
+
         <div
           className="spinner-border"
           role="status"
@@ -342,10 +599,21 @@ export default function Services() {
           </span>
         </div>
 
-        <span>Loading services...</span>
+        <span>
+          Loading Services...
+        </span>
+
       </div>
     );
   }
+
+  /* =========================================================
+     IMAGE
+  ========================================================= */
+
+  const displayedPanelImage =
+    panelPreview ||
+    getImageUrl(currentPanelImage);
 
   /* =========================================================
      PAGE
@@ -353,146 +621,234 @@ export default function Services() {
 
   return (
     <>
+
       {/* =====================================================
-          PAGE HEADER
-      ====================================================== */}
+          HEADER
+      ===================================================== */}
 
       <div className="page-header">
+
         <div>
-          <h1>Services</h1>
+
+          <h1>
+            Services
+          </h1>
 
           <p>
-            Manage the Services section and
-            service items displayed on the
-            homepage.
+            Manage the Services section
+            and service items displayed
+            on the homepage.
           </p>
+
         </div>
+
       </div>
 
       {/* =====================================================
-          ALERTS
-      ====================================================== */}
+          ERROR
+      ===================================================== */}
 
       {error && (
+
         <div
           className="alert alert-danger p-3 mb-3"
           role="alert"
         >
+
+          <i className="bi bi-exclamation-triangle me-2" />
+
           {error}
+
         </div>
+
       )}
 
+      {/* =====================================================
+          SUCCESS
+      ===================================================== */}
+
       {success && (
+
         <div
           className="alert alert-success p-3 mb-3"
           role="alert"
         >
+
+          <i className="bi bi-check-circle me-2" />
+
           {success}
+
         </div>
+
       )}
 
       {/* =====================================================
-          SERVICES SECTION
-      ====================================================== */}
+          SECTION MANAGER
+      ===================================================== */}
 
       <div className="split-manager">
 
         {/* ===================================================
-            PANEL IMAGE
+            IMAGE
         ==================================================== */}
 
         <div className="content-card form-card">
+
           <div className="card-heading">
+
             <div>
-              <h3>Panel Image</h3>
+
+              <h3>
+                Panel Image
+              </h3>
 
               <p>
-                Image displayed in the Services
-                section panel.
+                Image displayed in the
+                Services section panel.
               </p>
+
             </div>
+
           </div>
 
-          {panelPreview || currentPanelImage ? (
+          {displayedPanelImage ? (
+
             <img
               className="image-preview"
-              src={
-                panelPreview ||
-                getImageUrl(currentPanelImage)
-              }
+              src={displayedPanelImage}
               alt="Services panel"
             />
+
           ) : (
+
             <div className="image-placeholder">
+
               <i className="bi bi-image" />
 
               <span>
                 No image uploaded
               </span>
+
             </div>
+
           )}
 
           <div className="form-actions-modern">
+
             <label
               className="admin-btn btn btn-sm mb-0"
               style={{
-                cursor: "pointer",
+                cursor:
+                  saving
+                    ? "not-allowed"
+                    : "pointer",
               }}
             >
+
               <i className="bi bi-upload me-2" />
 
-              Choose Image
+              {newPanelImage
+                ? "Change Image"
+                : "Choose Image"}
 
               <input
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp,image/gif"
                 hidden
-                onChange={pickPanelImage}
+                disabled={saving}
+                onChange={handleImagePick}
               />
+
             </label>
+
+            {newPanelImage && (
+
+              <button
+                type="button"
+                className="btn btn-outline-danger btn-sm"
+                onClick={removeNewImage}
+                disabled={saving}
+              >
+
+                <i className="bi bi-x-lg me-2" />
+
+                Cancel New Image
+
+              </button>
+
+            )}
+
           </div>
 
           {newPanelImage && (
-            <>
-              <div className="text-muted mt-2">
-                Selected: {newPanelImage.name}
+
+            <div className="mt-2 text-muted">
+
+              <i className="bi bi-file-image me-2" />
+
+              Selected:{" "}
+
+              <strong>
+                {newPanelImage.name}
+              </strong>
+
+            </div>
+
+          )}
+
+          {!newPanelImage &&
+            currentPanelImage && (
+
+              <div className="mt-2 text-muted">
+
+                <small>
+
+                  Current image:{" "}
+
+                  <strong>
+                    {currentPanelImage}
+                  </strong>
+
+                </small>
+
               </div>
 
-              <div className="alert alert-warning mt-3 mb-0">
-                <small>
-                  Image preview only. The current
-                  API uses JSON and does not upload
-                  image files yet.
-                </small>
-              </div>
-            </>
-          )}
+            )}
+
         </div>
 
         {/* ===================================================
-            SECTION CONTENT
+            CONTENT
         ==================================================== */}
 
         <form
           className="content-card form-card"
-          onSubmit={handleSectionSave}
+          onSubmit={handleSave}
         >
+
           <div className="card-heading">
+
             <div>
-              <h3>Section Content</h3>
+
+              <h3>
+                Section Content
+              </h3>
 
               <p>
                 Edit the Services section
                 content.
               </p>
+
             </div>
+
           </div>
 
           <div className="row g-3">
 
-            {/* SECTION TITLE */}
+            {/* TITLE */}
 
             <div className="col-12">
+
               <label
                 className="form-label"
                 htmlFor="title"
@@ -508,11 +864,13 @@ export default function Services() {
                 value={form.title}
                 onChange={handleChange}
               />
+
             </div>
 
-            {/* SECTION SUBTITLE */}
+            {/* SUBTITLE */}
 
             <div className="col-12">
+
               <label
                 className="form-label"
                 htmlFor="subtitle"
@@ -528,19 +886,23 @@ export default function Services() {
                 onChange={handleChange}
                 rows={3}
               />
+
             </div>
 
             {/* PANEL */}
 
             <div className="col-12">
+
               <div className="form-section-title mb-0 mt-2">
                 Panel
               </div>
+
             </div>
 
             {/* PANEL TITLE */}
 
             <div className="col-12">
+
               <label
                 className="form-label"
                 htmlFor="panel_title"
@@ -556,11 +918,13 @@ export default function Services() {
                 value={form.panel_title}
                 onChange={handleChange}
               />
+
             </div>
 
             {/* PANEL BUTTON TEXT */}
 
             <div className="col-md-6">
+
               <label
                 className="form-label"
                 htmlFor="panel_btn_text"
@@ -576,11 +940,13 @@ export default function Services() {
                 value={form.panel_btn_text}
                 onChange={handleChange}
               />
+
             </div>
 
             {/* PANEL BUTTON LINK */}
 
             <div className="col-md-6">
+
               <label
                 className="form-label"
                 htmlFor="panel_btn_link"
@@ -596,19 +962,23 @@ export default function Services() {
                 value={form.panel_btn_link}
                 onChange={handleChange}
               />
+
             </div>
 
             {/* STATS */}
 
             <div className="col-12">
+
               <div className="form-section-title mb-0 mt-2">
                 Stats
               </div>
+
             </div>
 
             {/* STATS BADGE */}
 
             <div className="col-md-6">
+
               <label
                 className="form-label"
                 htmlFor="stats_badge_text"
@@ -624,11 +994,13 @@ export default function Services() {
                 value={form.stats_badge_text}
                 onChange={handleChange}
               />
+
             </div>
 
             {/* STATS TITLE */}
 
             <div className="col-md-6">
+
               <label
                 className="form-label"
                 htmlFor="stats_title"
@@ -644,11 +1016,13 @@ export default function Services() {
                 value={form.stats_title}
                 onChange={handleChange}
               />
+
             </div>
 
             {/* STATS DESCRIPTION */}
 
             <div className="col-12">
+
               <label
                 className="form-label"
                 htmlFor="stats_description"
@@ -664,11 +1038,13 @@ export default function Services() {
                 onChange={handleChange}
                 rows={4}
               />
+
             </div>
 
             {/* STATS BUTTON TEXT */}
 
             <div className="col-md-6">
+
               <label
                 className="form-label"
                 htmlFor="stats_btn_text"
@@ -684,11 +1060,13 @@ export default function Services() {
                 value={form.stats_btn_text}
                 onChange={handleChange}
               />
+
             </div>
 
             {/* STATS BUTTON LINK */}
 
             <div className="col-md-6">
+
               <label
                 className="form-label"
                 htmlFor="stats_btn_link"
@@ -704,18 +1082,23 @@ export default function Services() {
                 value={form.stats_btn_link}
                 onChange={handleChange}
               />
+
             </div>
+
           </div>
 
-          {/* SAVE SECTION */}
+          {/* SAVE */}
 
           <div className="form-actions-modern">
+
             <button
               className="admin-btn btn"
               type="submit"
               disabled={saving}
             >
+
               {saving ? (
+
                 <>
                   <span
                     className="spinner-border spinner-border-sm me-2"
@@ -725,16 +1108,23 @@ export default function Services() {
 
                   Saving...
                 </>
+
               ) : (
+
                 <>
                   <i className="bi bi-check-lg me-2" />
 
                   Save Changes
                 </>
+
               )}
+
             </button>
+
           </div>
+
         </form>
+
       </div>
 
       {/* =====================================================
@@ -744,184 +1134,216 @@ export default function Services() {
       <div className="content-card list-card mt-3">
 
         <div className="card-heading">
+
           <div>
-            <h3>Services List</h3>
+
+            <h3>
+              Services List
+            </h3>
 
             <span>
               Edit each service's icon,
               title, description, and
               display order.
             </span>
+
           </div>
+
         </div>
 
         <div className="stack-list">
 
-          {services.map((service) => (
-            <div
-              className="data-item"
-              key={service.id}
-            >
-
-              {/* =================================================
-                  SERVICE ICON PREVIEW
-              ================================================== */}
-
-              <div className="data-icon">
-                <i
-                  className={`bi ${
-                    service.icon || "bi-tools"
-                  }`}
-                />
-              </div>
-
-              {/* =================================================
-                  SERVICE CONTENT
-              ================================================== */}
+          {services.map(
+            (service, index) => (
 
               <div
-                className="data-info"
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                  flex: 1,
-                }}
+                className="data-item"
+                key={
+                  service.id ??
+                  `service-${index}`
+                }
               >
 
-                {/* TOP ROW */}
+                {/* ICON PREVIEW */}
+
+                <div className="data-icon">
+
+                  <i
+                    className={`bi ${
+                      service.icon ||
+                      "bi-tools"
+                    }`}
+                  />
+
+                </div>
+
+                {/* SERVICE CONTENT */}
 
                 <div
+                  className="data-info"
                   style={{
                     display: "flex",
-                    gap: 10,
-                    flexWrap: "wrap",
+                    flexDirection: "column",
+                    gap: 8,
+                    flex: 1,
                   }}
                 >
 
-                  {/* ICON */}
-
-                  <input
-                    type="text"
-                    className="form-input form-control form-control-sm"
+                  <div
                     style={{
-                      maxWidth: 180,
+                      display: "flex",
+                      gap: 10,
+                      flexWrap: "wrap",
                     }}
-                    value={service.icon || ""}
-                    onChange={(e) =>
-                      handleServiceFieldChange(
-                        service.id,
-                        "icon",
-                        e.target.value
-                      )
-                    }
-                    placeholder="bi-tools"
-                  />
+                  >
 
-                  {/* TITLE */}
+                    {/* ICON */}
 
-                  <input
-                    type="text"
+                    <input
+                      type="text"
+                      className="form-input form-control form-control-sm"
+                      style={{
+                        maxWidth: 180,
+                      }}
+                      value={
+                        service.icon || ""
+                      }
+                      onChange={(e) =>
+                        handleServiceChange(
+                          index,
+                          "icon",
+                          e.target.value
+                        )
+                      }
+                      placeholder="bi-tools"
+                    />
+
+                    {/* TITLE */}
+
+                    <input
+                      type="text"
+                      className="form-input form-control form-control-sm"
+                      style={{
+                        flex: 1,
+                        minWidth: 180,
+                      }}
+                      value={
+                        service.title || ""
+                      }
+                      onChange={(e) =>
+                        handleServiceChange(
+                          index,
+                          "title",
+                          e.target.value
+                        )
+                      }
+                      placeholder="Service title"
+                    />
+
+                    {/* ORDER */}
+
+                    <input
+                      type="number"
+                      className="form-input form-control form-control-sm"
+                      style={{
+                        maxWidth: 100,
+                      }}
+                      value={
+                        service.display_order ?? ""
+                      }
+                      onChange={(e) =>
+                        handleServiceChange(
+                          index,
+                          "display_order",
+                          e.target.value
+                        )
+                      }
+                      placeholder="Order"
+                    />
+
+                  </div>
+
+                  {/* DESCRIPTION */}
+
+                  <textarea
                     className="form-input form-control form-control-sm"
-                    style={{
-                      flex: 1,
-                      minWidth: 180,
-                    }}
-                    value={service.title || ""}
-                    onChange={(e) =>
-                      handleServiceFieldChange(
-                        service.id,
-                        "title",
-                        e.target.value
-                      )
-                    }
-                    placeholder="Service title"
-                  />
-
-                  {/* DISPLAY ORDER */}
-
-                  <input
-                    type="number"
-                    className="form-input form-control form-control-sm"
-                    style={{
-                      maxWidth: 100,
-                    }}
                     value={
-                      service.display_order ?? 0
+                      service.description || ""
                     }
                     onChange={(e) =>
-                      handleServiceFieldChange(
-                        service.id,
-                        "display_order",
+                      handleServiceChange(
+                        index,
+                        "description",
                         e.target.value
                       )
                     }
-                    placeholder="Order"
+                    placeholder="Service description"
+                    rows={3}
                   />
+
                 </div>
 
-                {/* DESCRIPTION */}
+                {/* SAVE */}
 
-                <textarea
-                  className="form-input form-control form-control-sm"
-                  value={
-                    service.description || ""
-                  }
-                  onChange={(e) =>
-                    handleServiceFieldChange(
-                      service.id,
-                      "description",
-                      e.target.value
-                    )
-                  }
-                  placeholder="Service description"
-                  rows={3}
-                />
+                <div className="data-actions">
+
+                  <button
+                    className="btn-icon"
+                    type="button"
+                    disabled={
+                      serviceSaving ===
+                      service.id
+                    }
+                    onClick={() =>
+                      handleServiceSave(
+                        service
+                      )
+                    }
+                    title="Save service"
+                  >
+
+                    {serviceSaving ===
+                    service.id ? (
+
+                      <span
+                        className="spinner-border spinner-border-sm"
+                        role="status"
+                        aria-hidden="true"
+                      />
+
+                    ) : (
+
+                      <i className="bi bi-check2" />
+
+                    )}
+
+                  </button>
+
+                </div>
+
               </div>
 
-              {/* =================================================
-                  SAVE BUTTON
-              ================================================== */}
-
-              <div className="data-actions">
-                <button
-                  className="btn-icon"
-                  type="button"
-                  disabled={
-                    serviceSaving === service.id
-                  }
-                  onClick={() =>
-                    handleServiceSave(service)
-                  }
-                  title="Save service"
-                >
-                  {serviceSaving === service.id ? (
-                    <span
-                      className="spinner-border spinner-border-sm"
-                      role="status"
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <i className="bi bi-check2" />
-                  )}
-                </button>
-              </div>
-            </div>
-          ))}
-
-          {/* EMPTY STATE */}
+            )
+          )}
 
           {services.length === 0 && (
+
             <div className="empty-state">
+
               <i className="bi bi-tools mb-2" />
 
               <div>
                 No services found.
               </div>
+
             </div>
+
           )}
+
         </div>
+
       </div>
+
     </>
   );
 }

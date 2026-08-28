@@ -1,39 +1,38 @@
 # Constructify — Construction Portfolio
 
-This is the client-side of a construction company portfolio. Nothing
-on the page is hardcoded — every section pulls its content from
-MySQL through a small native PHP API, which means an Admin panel can
-be bolted on later to let someone edit the site without ever
-touching this code.
+A full-stack construction company portfolio website with a React client, React Admin Panel, native PHP API, and MySQL database.
+
+The website content is managed dynamically through the database, so administrators can update the portfolio without modifying the frontend code.
 
 ## How it's wired together
 
-```
+```text
 React Client
       ↓
 PHP Native API
       ↓
 MySQL Database
+      ↑
+React Admin Panel
 ```
 
-Each section of the page has its own endpoint and its own tables, so
-it's easy to trace where any piece of content actually comes from:
+Main Sections:
 
-| React API call     | PHP endpoint         | Database tables                              |
-|---------------------|-----------------------|-----------------------------------------------|
-| `getSiteSettings()` | `site-settings.php`   | `site_settings`                                |
-| `getHero()`          | `hero.php`             | `hero_section` + `counters`                    |
-| `getAbout()`         | `about.php`            | `about_section` + `about_features`             |
-| `getServices()`      | `services.php`         | `services_section` + `services` + `counters`   |
-| `getProjects()`      | `projects.php`         | `projects_section` + `project_categories` + `projects` |
+- **Hero** — Main landing section, content, image, CTA buttons, and counters.
+- **About** — Company information, images, and feature cards.
+- **Services** — Services section, service items, and track-record counters.
+- **Projects** — Projects, categories, images, and project information.
+- **Site Settings** — General website settings, navbar, and footer information.
 
 ## Database structure
 
-- **`hero_section`** — the Home/Hero content: badge, title, subtitle, CTA buttons, background image.
-- **`about_section`** + **`about_features`** — the main About copy, plus its repeatable feature cards.
-- **`services_section`** + **`services`** — the section heading and panel/track-record text, plus each individual service card.
-- **`projects_section`** + **`project_categories`** + **`projects`** — the Projects heading, the filter categories, and the actual project entries.
-- **`counters`** — one reusable table for stat blocks, shared by both Hero and Services (they're told apart by `section_key`).
+- **`site_settings`** — Navbar and footer information, plus general website settings.
+- **`hero_section`** — Home/Hero content: badge, title, subtitle, CTA buttons, and background image.
+- **`about_section`** + **`about_features`** — Main About copy, images, and repeatable feature cards.
+- **`services_section`** + **`services`** — Section heading, panel and track-record text, plus individual service cards.
+- **`projects_section`** + **`project_categories`** + **`projects`** — Projects heading, filter categories, and project entries.
+- **`counters`** — Reusable statistic blocks shared by Hero and Services, separated using `section_key`.
+- **`admins`** — Administrator accounts used for Admin Panel authentication.
 
 ## Screenshots
 
@@ -49,28 +48,61 @@ it's easy to trace where any piece of content actually comes from:
 |---|---|
 | ![Projects](screenshots/projects.png) | ![Projects](screenshots/projects2.png) |
 
+| Admin Dashboard | Admin Hero |
+|---|---|
+| ![Admin Dashboard](screenshots/admin-dashboard.png) | ![Admin Hero](screenshots/admin-hero.png) |
+
+| Admin About | Admin Services |
+|---|---|
+| ![Admin About](screenshots/admin-about.png) | ![Admin Services](screenshots/admin-services.png) |
+
+| Admin Projects | Admin Categories |
+|---|---|
+| ![Admin Projects](screenshots/admin-projects.png) | ![Admin Categories](screenshots/admin-categories.png) |
 
 ## Getting it running
 
 **1. Database**
-Import `database/schema.sql` into MySQL, then update the credentials
-in `backend/includes/db.php` to match your setup.
+
+Import `database/schema.sql` into MySQL, then update the credentials in:
+
+```text
+backend/includes/db.php
+```
+
+to match your local setup.
 
 **2. Backend**
-Serve the `backend/` folder with PHP — XAMPP/WAMP or `php -S` both
-work fine. Each file in `backend/api/` just returns JSON for its
-section.
+
+Serve the `backend/` folder with PHP. XAMPP, WAMP, or PHP’s built-in server all work.
+
+```bash
+php -S localhost:8000
+```
+
+Each file inside `backend/api/` returns JSON content for a website section.
+
+The Admin API is available at:
+
+```text
+http://localhost/construction-portfolio/Server/api/admin
+```
 
 **3. Frontend**
+
 ```bash
-crao -n Client
 cd Client
-npm install react-router-dom
-npx update-browserslist-db@latest
-npm install web-vitals
+npm install
+npm start
 ```
-Copy this project's `frontend/src` into `Client/src`, and drop the
-Bootstrap Icons link into `Client/public/index.html`:
+
+The Client application normally runs at:
+
+```text
+http://localhost:3000
+```
+
+Add the Bootstrap Icons link inside `Client/public/index.html`:
 
 ```html
 <!-- Bootstrap Icons -->
@@ -80,23 +112,65 @@ Bootstrap Icons link into `Client/public/index.html`:
 />
 ```
 
-Then copy `.env.example` to `.env`, point `REACT_APP_API_URL` at
-wherever your backend lives, and start it up:
+Copy `.env.example` to `.env`, then set the API URL:
+
+```env
+REACT_APP_API_URL=http://localhost/construction-portfolio/Server/api
+```
+
+**4. Admin Panel**
 
 ```bash
+cd Admin
+npm install
 npm start
+```
+
+The Admin Panel runs at:
+
+```text
+http://localhost:3001
+```
+
+Create an `.env` file inside the `Admin` folder:
+
+```env
+REACT_APP_API_URL=http://localhost/construction-portfolio/Server/api
+REACT_APP_ADMIN_API_URL=http://localhost/construction-portfolio/Server/api/admin
 ```
 
 ## A few things worth knowing
 
-- Only three things actually *do* anything right now: the nav
-  anchor-scroll (with the active link tracking as you scroll),
-  the project category filters, and the project image lightbox.
-  Every other button — Get Estimate, Request a Quote, Start Your
-  Project, and so on — is static on purpose, since none of them had
-  their behavior shown in the reference video.
-- `Team`, `Pages`, and `Contact` in the nav are placeholders for now
-  — they're there visually, they just don't go anywhere yet.
-- The image filenames stored in the database have to match whatever
-  you actually put in `frontend/public/images/`, or they just won't
-  load. 
+- Website content is stored in MySQL and loaded dynamically through the PHP API.
+- The Client and Admin Panel are separate React applications connected to the same backend.
+- Images uploaded through the Admin Panel are stored in the `uploads/` directory.
+- Image filenames in the database must match the actual files in the images or uploads directory.
+- Admin routes require JWT authentication.
+- Project categories and projects support full CRUD operations.
+- `Team`, `Pages`, and `Contact` in the navigation are placeholders for now.
+
+## Admin Panel
+
+The Admin Panel allows authenticated administrators to manage website content through a dashboard.
+
+Administrators can:
+
+- Update Hero content and counters.
+- Update About content and features.
+- Update Services section content and service items.
+- Update Services counters.
+- Create, update, and delete project categories.
+- Create, update, and delete projects.
+- Update site settings.
+- Upload and replace website images.
+
+## Technologies
+
+- React.js
+- JavaScript
+- PHP
+- MySQL
+- JWT Authentication
+- Bootstrap Icons
+- XAMPP / WAMP
+- phpMyAdmin

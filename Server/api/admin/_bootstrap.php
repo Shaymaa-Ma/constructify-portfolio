@@ -1,3 +1,4 @@
+
 <?php
 
 /*
@@ -5,13 +6,6 @@
 | Admin API Bootstrap
 |--------------------------------------------------------------------------
 | Shared setup for all Admin API endpoints.
-|
-| Responsibilities:
-| - CORS
-| - Database connection
-| - JSON responses
-| - Request helpers
-| - Admin authentication
 |--------------------------------------------------------------------------
 */
 
@@ -36,7 +30,7 @@ require_once __DIR__ . '/../../includes/db.php';
 
 /*
 |--------------------------------------------------------------------------
-| JSON Response Header
+| JSON Response
 |--------------------------------------------------------------------------
 */
 
@@ -57,8 +51,7 @@ function admin_json(array $data, int $status = 200): void
 
     echo json_encode(
         $data,
-        JSON_UNESCAPED_UNICODE |
-        JSON_UNESCAPED_SLASHES
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
     );
 
     exit;
@@ -133,10 +126,8 @@ function request_method(): string
 |--------------------------------------------------------------------------
 */
 
-function require_method(
-    string|array $methods
-): void {
-
+function require_method(string|array $methods): void
+{
     $methods = is_array($methods)
         ? $methods
         : [$methods];
@@ -146,17 +137,10 @@ function require_method(
         $methods
     );
 
-    if (
-        !in_array(
-            request_method(),
-            $methods,
-            true
-        )
-    ) {
+    if (!in_array(request_method(), $methods, true)) {
 
         header(
-            'Allow: ' .
-            implode(', ', $methods)
+            'Allow: ' . implode(', ', $methods)
         );
 
         admin_error(
@@ -175,14 +159,9 @@ function require_method(
 
 function get_json_body(): array
 {
-    $raw = file_get_contents(
-        'php://input'
-    );
+    $raw = file_get_contents('php://input');
 
-    if (
-        $raw === false ||
-        trim($raw) === ''
-    ) {
+    if ($raw === false || trim($raw) === '') {
         return [];
     }
 
@@ -220,10 +199,7 @@ function get_request_id(): ?int
         FILTER_VALIDATE_INT
     );
 
-    if (
-        $id === false ||
-        $id <= 0
-    ) {
+    if ($id === false || $id <= 0) {
 
         admin_error(
             'Invalid ID.',
@@ -250,11 +226,7 @@ function get_authorization_header(): string
      * Normal Apache header
      */
 
-    if (
-        isset(
-            $_SERVER['HTTP_AUTHORIZATION']
-        )
-    ) {
+    if (isset($_SERVER['HTTP_AUTHORIZATION'])) {
 
         $header = trim(
             $_SERVER['HTTP_AUTHORIZATION']
@@ -268,17 +240,11 @@ function get_authorization_header(): string
 
     if (
         $header === '' &&
-        isset(
-            $_SERVER[
-                'REDIRECT_HTTP_AUTHORIZATION'
-            ]
-        )
+        isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])
     ) {
 
         $header = trim(
-            $_SERVER[
-                'REDIRECT_HTTP_AUTHORIZATION'
-            ]
+            $_SERVER['REDIRECT_HTTP_AUTHORIZATION']
         );
     }
 
@@ -294,14 +260,9 @@ function get_authorization_header(): string
 
         $headers = getallheaders();
 
-        foreach (
-            $headers as $key => $value
-        ) {
+        foreach ($headers as $key => $value) {
 
-            if (
-                strtolower($key) ===
-                'authorization'
-            ) {
+            if (strtolower($key) === 'authorization') {
 
                 $header = trim($value);
 
@@ -323,8 +284,7 @@ function get_authorization_header(): string
 
 function get_bearer_token(): ?string
 {
-    $header =
-        get_authorization_header();
+    $header = get_authorization_header();
 
     if ($header === '') {
         return null;
@@ -338,9 +298,7 @@ function get_bearer_token(): ?string
         )
     ) {
 
-        return trim(
-            $matches[1]
-        );
+        return trim($matches[1]);
     }
 
     return null;
@@ -353,10 +311,7 @@ function get_bearer_token(): ?string
 |--------------------------------------------------------------------------
 */
 
-if (
-    session_status() ===
-    PHP_SESSION_NONE
-) {
+if (session_status() === PHP_SESSION_NONE) {
 
     session_start();
 }
@@ -370,8 +325,7 @@ if (
 
 function require_admin(): array
 {
-    $token =
-        get_bearer_token();
+    $token = get_bearer_token();
 
     if (!$token) {
 
@@ -387,12 +341,8 @@ function require_admin(): array
      */
 
     if (
-        !isset(
-            $_SESSION['admin_token']
-        ) ||
-        !isset(
-            $_SESSION['admin_id']
-        )
+        !isset($_SESSION['admin_token']) ||
+        !isset($_SESSION['admin_id'])
     ) {
 
         admin_error(
@@ -408,11 +358,8 @@ function require_admin(): array
 
     if (
         !hash_equals(
-            (string)
-            $_SESSION['admin_token'],
-
-            (string)
-            $token
+            (string) $_SESSION['admin_token'],
+            (string) $token
         )
     ) {
 
@@ -424,28 +371,23 @@ function require_admin(): array
 
 
     return [
-        'id' =>
-            (int)
-            $_SESSION['admin_id'],
+        'id' => (int) $_SESSION['admin_id'],
 
         'name' =>
-            $_SESSION['admin_name']
-            ?? null,
+            $_SESSION['admin_name'] ?? null,
 
         'email' =>
-            $_SESSION['admin_email']
-            ?? null,
+            $_SESSION['admin_email'] ?? null,
 
         'role' =>
-            $_SESSION['admin_role']
-            ?? 'admin'
+            $_SESSION['admin_role'] ?? 'admin'
     ];
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| Alias
+| Authentication Alias
 |--------------------------------------------------------------------------
 */
 
@@ -469,10 +411,7 @@ function require_fields(
     foreach ($fields as $field) {
 
         if (
-            !array_key_exists(
-                $field,
-                $data
-            ) ||
+            !array_key_exists($field, $data) ||
             $data[$field] === null ||
             (
                 is_string($data[$field]) &&
@@ -501,11 +440,7 @@ function integer_value(
     int $default = 0
 ): int {
 
-    if (
-        $value === null ||
-        $value === ''
-    ) {
-
+    if ($value === null || $value === '') {
         return $default;
     }
 
@@ -522,7 +457,7 @@ function integer_value(
         );
     }
 
-    return (int)$value;
+    return (int) $value;
 }
 
 
@@ -538,8 +473,7 @@ function string_value(
     int $maxLength = 0
 ): string {
 
-    $value =
-        trim((string)$value);
+    $value = trim((string) $value);
 
     if (
         $maxLength > 0 &&
@@ -564,8 +498,7 @@ function string_value(
 
 function database_error(
     mysqli $conn,
-    string $message =
-        'Database operation failed.'
+    string $message = 'Database operation failed.'
 ): void {
 
     error_log(

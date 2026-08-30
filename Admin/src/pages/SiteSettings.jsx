@@ -1,77 +1,156 @@
+import React, {
+  useEffect,
+  useState,
+} from "react";
 
-import React, { useEffect, useState } from "react";
-import { siteSettingsApi } from "../api/adminApi";
+import {
+  siteSettingsApi,
+} from "../api/adminApi";
+
+
+/* =========================================================
+   EMPTY FORM
+========================================================= */
+
+const emptySettings = {
+  company_name: "",
+  phone: "",
+  email: "",
+  logo_icon: "",
+  cta_text: "",
+  cta_link: "",
+};
+
 
 export default function SiteSettings() {
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
 
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [
+    loading,
+    setLoading
+  ] = useState(true);
 
-  const [form, setForm] = useState({
-    company_name: "",
-    phone: "",
-    email: "",
-    logo_icon: "",
-    cta_text: "",
-    cta_link: "",
-  });
+  const [
+    saving,
+    setSaving
+  ] = useState(false);
 
-  /* =========================================================
-     LOAD SITE SETTINGS
-  ========================================================= */
+  const [
+    error,
+    setError
+  ] = useState("");
+
+  const [
+    success,
+    setSuccess
+  ] = useState("");
+
+  const [
+    form,
+    setForm
+  ] = useState(emptySettings);
+
+
+  /* =======================================================
+     LOAD SETTINGS
+  ======================================================= */
 
   useEffect(() => {
+
     loadSettings();
+
   }, []);
 
+
   async function loadSettings() {
+
     setLoading(true);
     setError("");
-    setSuccess("");
 
     try {
-      const response = await siteSettingsApi.get();
+
+      const response =
+        await siteSettingsApi.get();
+
 
       /*
-       * The API may return the settings directly
-       * or inside response.data.
+       * API response:
+       *
+       * {
+       *   success: true,
+       *   data: {
+       *      company_name: "...",
+       *      ...
+       *   }
+       * }
        */
-      const data = response?.data || response || {};
+
+      const data =
+        response?.data || {};
+
 
       setForm({
-        company_name: data.company_name || "",
-        phone: data.phone || "",
-        email: data.email || "",
-        logo_icon: data.logo_icon || "",
-        cta_text: data.cta_text || "",
-        cta_link: data.cta_link || "",
+
+        company_name:
+          data.company_name ?? "",
+
+        phone:
+          data.phone ?? "",
+
+        email:
+          data.email ?? "",
+
+        logo_icon:
+          data.logo_icon ?? "",
+
+        cta_text:
+          data.cta_text ?? "",
+
+        cta_link:
+          data.cta_link ?? "",
+
       });
+
     } catch (err) {
-      setError(
-        err?.message || "Failed to load site settings."
+
+      console.error(
+        "Failed to load site settings:",
+        err
       );
+
+      setError(
+        err?.message ||
+        "Failed to load site settings."
+      );
+
     } finally {
+
       setLoading(false);
+
     }
+
   }
 
-  /* =========================================================
-     HANDLE INPUT CHANGES
-  ========================================================= */
+
+  /* =======================================================
+     HANDLE CHANGE
+  ======================================================= */
 
   function handleChange(e) {
-    const { name, value } = e.target;
 
-    setForm((previous) => ({
-      ...previous,
-      [name]: value,
-    }));
+    const {
+      name,
+      value,
+    } = e.target;
 
-    /*
-     * Clear messages when the administrator starts editing.
-     */
+
+    setForm(
+      (previous) => ({
+        ...previous,
+        [name]: value,
+      })
+    );
+
+
     if (error) {
       setError("");
     }
@@ -79,115 +158,231 @@ export default function SiteSettings() {
     if (success) {
       setSuccess("");
     }
+
   }
 
-  /* =========================================================
-     UPDATE SITE SETTINGS
-  ========================================================= */
+
+  /* =======================================================
+     SAVE
+  ======================================================= */
 
   async function handleSave(e) {
+
     e.preventDefault();
 
-    setSaving(true);
     setError("");
     setSuccess("");
+    setSaving(true);
+
 
     try {
-      await siteSettingsApi.update(form);
 
-      setSuccess("Site settings updated successfully.");
+      const response =
+        await siteSettingsApi.update(
+          form
+        );
+
 
       /*
-       * Reload the saved values from the server so the
-       * form always reflects the database.
+       * Use the returned database row
+       * immediately.
        */
-      await loadSettings();
-    } catch (err) {
-      setError(
-        err?.message || "Failed to update site settings."
+
+      const updated =
+        response?.data;
+
+
+      if (updated) {
+
+        setForm({
+
+          company_name:
+            updated.company_name ?? "",
+
+          phone:
+            updated.phone ?? "",
+
+          email:
+            updated.email ?? "",
+
+          logo_icon:
+            updated.logo_icon ?? "",
+
+          cta_text:
+            updated.cta_text ?? "",
+
+          cta_link:
+            updated.cta_link ?? "",
+
+        });
+
+      }
+
+
+      setSuccess(
+        "Site settings updated successfully."
       );
+
+    } catch (err) {
+
+      console.error(
+        "Failed to update site settings:",
+        err
+      );
+
+      setError(
+        err?.message ||
+        "Failed to update site settings."
+      );
+
     } finally {
+
       setSaving(false);
+
     }
+
   }
 
-  /* =========================================================
-     LOADING STATE
-  ========================================================= */
+
+  /* =======================================================
+     LOADING
+  ======================================================= */
 
   if (loading) {
+
     return (
       <div className="loading-state">
+
         <div
           className="spinner-border"
           role="status"
           aria-hidden="true"
         />
 
-        <span>Loading site settings…</span>
+        <span>
+          Loading site settings…
+        </span>
+
       </div>
     );
+
   }
 
-  /* =========================================================
+
+  /* =======================================================
      PAGE
-  ========================================================= */
+  ======================================================= */
 
   return (
+
     <>
-      {/* PAGE HEADER */}
+
+      {/* ===================================================
+          PAGE HEADER
+      =================================================== */}
+
       <div className="page-header">
+
         <div>
-          <h1>Site Settings</h1>
+
+          <h1>
+            Site Settings
+          </h1>
+
           <p>
-            Manage your company information and branding
-            used across the website.
+            Manage your company information
+            and branding used across the website.
           </p>
+
         </div>
+
       </div>
 
-      {/* ERROR MESSAGE */}
+
+      {/* ===================================================
+          ERROR
+      =================================================== */}
+
       {error && (
+
         <div
           className="alert alert-danger p-3 mb-3"
           role="alert"
         >
+
           {error}
+
         </div>
+
       )}
 
-      {/* SUCCESS MESSAGE */}
+
+      {/* ===================================================
+          SUCCESS
+      =================================================== */}
+
       {success && (
+
         <div
           className="alert alert-success p-3 mb-3"
           role="alert"
         >
+
           {success}
+
         </div>
+
       )}
 
-      {/* SETTINGS FORM */}
+
+      {/* ===================================================
+          FORM
+      =================================================== */}
+
       <form
-  className="content-card form-card site-settings-card"
-  onSubmit={handleSave}
->
+        className="
+          content-card
+          form-card
+          site-settings-card
+        "
+        onSubmit={handleSave}
+      >
 
+        {/* =================================================
+            CARD HEADER
+        ================================================= */}
 
-        {/* CARD HEADER */}
         <div className="card-heading">
+
           <div>
-            <h3>Company Information</h3>
+
+            <h3>
+              Company Information
+            </h3>
+
             <p>
-              Update the information displayed throughout
-              the Constructify website.
+              Update the information displayed
+              throughout the Constructify website.
             </p>
+
           </div>
+
         </div>
+
+
+        {/* =================================================
+            FORM FIELDS
+        ================================================= */}
 
         <div className="row g-3">
 
-          {/* COMPANY NAME */}
+
+          {/* =================================================
+              COMPANY NAME
+          ================================================= */}
+
           <div className="col-12">
+
             <label
               htmlFor="company_name"
               className="form-label"
@@ -197,18 +392,31 @@ export default function SiteSettings() {
 
             <input
               id="company_name"
-              type="text"
-              className="form-input form-control"
               name="company_name"
-              value={form.company_name}
-              onChange={handleChange}
+              type="text"
+              className="
+                form-input
+                form-control
+              "
+              value={
+                form.company_name
+              }
+              onChange={
+                handleChange
+              }
               placeholder="Constructify"
               required
             />
+
           </div>
 
-          {/* PHONE */}
+
+          {/* =================================================
+              PHONE
+          ================================================= */}
+
           <div className="col-md-6">
+
             <label
               htmlFor="phone"
               className="form-label"
@@ -218,17 +426,30 @@ export default function SiteSettings() {
 
             <input
               id="phone"
-              type="tel"
-              className="form-input form-control"
               name="phone"
-              value={form.phone}
-              onChange={handleChange}
+              type="tel"
+              className="
+                form-input
+                form-control
+              "
+              value={
+                form.phone
+              }
+              onChange={
+                handleChange
+              }
               placeholder="+961 XX XXX XXX"
             />
+
           </div>
 
-          {/* EMAIL */}
+
+          {/* =================================================
+              EMAIL
+          ================================================= */}
+
           <div className="col-md-6">
+
             <label
               htmlFor="email"
               className="form-label"
@@ -238,17 +459,30 @@ export default function SiteSettings() {
 
             <input
               id="email"
-              type="email"
-              className="form-input form-control"
               name="email"
-              value={form.email}
-              onChange={handleChange}
+              type="email"
+              className="
+                form-input
+                form-control
+              "
+              value={
+                form.email
+              }
+              onChange={
+                handleChange
+              }
               placeholder="info@example.com"
             />
+
           </div>
 
-          {/* LOGO ICON */}
+
+          {/* =================================================
+              LOGO ICON
+          ================================================= */}
+
           <div className="col-12">
+
             <label
               htmlFor="logo_icon"
               className="form-label"
@@ -258,22 +492,37 @@ export default function SiteSettings() {
 
             <input
               id="logo_icon"
-              type="text"
-              className="form-input form-control"
               name="logo_icon"
-              value={form.logo_icon}
-              onChange={handleChange}
+              type="text"
+              className="
+                form-input
+                form-control
+              "
+              value={
+                form.logo_icon
+              }
+              onChange={
+                handleChange
+              }
               placeholder="bi-buildings"
             />
 
             <small className="text-muted d-block mt-1">
-              Enter the Bootstrap Icons class used for the
-              company logo.
+
+              Enter the Bootstrap Icons class
+              used for the company logo.
+
             </small>
+
           </div>
 
-          {/* CTA TEXT */}
+
+          {/* =================================================
+              CTA TEXT
+          ================================================= */}
+
           <div className="col-md-6">
+
             <label
               htmlFor="cta_text"
               className="form-label"
@@ -283,17 +532,30 @@ export default function SiteSettings() {
 
             <input
               id="cta_text"
-              type="text"
-              className="form-input form-control"
               name="cta_text"
-              value={form.cta_text}
-              onChange={handleChange}
+              type="text"
+              className="
+                form-input
+                form-control
+              "
+              value={
+                form.cta_text
+              }
+              onChange={
+                handleChange
+              }
               placeholder="Get Started"
             />
+
           </div>
 
-          {/* CTA LINK */}
+
+          {/* =================================================
+              CTA LINK
+          ================================================= */}
+
           <div className="col-md-6">
+
             <label
               htmlFor="cta_link"
               className="form-label"
@@ -303,42 +565,79 @@ export default function SiteSettings() {
 
             <input
               id="cta_link"
-              type="text"
-              className="form-input form-control"
               name="cta_link"
-              value={form.cta_link}
-              onChange={handleChange}
+              type="text"
+              className="
+                form-input
+                form-control
+              "
+              value={
+                form.cta_link
+              }
+              onChange={
+                handleChange
+              }
               placeholder="/contact"
             />
+
           </div>
+
         </div>
 
-        {/* ACTIONS */}
+
+        {/* =================================================
+            ACTIONS
+        ================================================= */}
+
         <div className="form-actions-modern">
+
           <button
             type="submit"
-            className="admin-btn btn"
+            className="
+              admin-btn
+              btn
+            "
             disabled={saving}
           >
+
             {saving ? (
+
               <>
+
                 <span
-                  className="spinner-border spinner-border-sm me-2"
+                  className="
+                    spinner-border
+                    spinner-border-sm
+                    me-2
+                  "
                   role="status"
                   aria-hidden="true"
                 />
-                Saving…
-              </>
-            ) : (
-              <>
-                <i className="bi bi-check-lg me-2" />
-                Save Changes
-              </>
-            )}
-          </button>
-        </div>
-      </form>
-    </>
-  );
-}
 
+                Saving…
+
+              </>
+
+            ) : (
+
+              <>
+
+                <i className="bi bi-check-lg me-2" />
+
+                Save Changes
+
+              </>
+
+            )}
+
+          </button>
+
+        </div>
+
+      </form>
+
+    </>
+
+  );
+
+}

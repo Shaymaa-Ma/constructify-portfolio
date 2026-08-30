@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 
 import {
@@ -40,21 +39,17 @@ export default function Services() {
   });
 
   /* =========================================================
-     CURRENT IMAGE
+     COUNTERS (track-record stats)
+  ========================================================= */
+
+  const [counters, setCounters] = useState([]);
+
+  /* =========================================================
+     IMAGE
   ========================================================= */
 
   const [currentPanelImage, setCurrentPanelImage] = useState(null);
-
-  /* =========================================================
-     NEW IMAGE
-  ========================================================= */
-
   const [newPanelImage, setNewPanelImage] = useState(null);
-
-  /* =========================================================
-     IMAGE PREVIEW
-  ========================================================= */
-
   const [panelPreview, setPanelPreview] = useState(null);
 
   /* =========================================================
@@ -81,7 +76,12 @@ export default function Services() {
   }, []);
 
   /* =========================================================
-     LOAD SERVICES SECTION + ITEMS
+     LOAD SERVICES SECTION + COUNTERS + ITEMS
+
+     servicesApi.get() resolves the already-parsed JSON body
+     directly: { success, data: section, counters: [...],
+     image_url }. There is no extra axios-style ".data.data"
+     nesting to unwrap — this client is fetch-based.
   ========================================================= */
 
   async function loadServices() {
@@ -91,40 +91,9 @@ export default function Services() {
 
     try {
 
-      /* =====================================================
-         LOAD SERVICES SECTION
-      ===================================================== */
+      const response = await servicesApi.getSection();
 
-      const response = await servicesApi.get();
-
-      console.log("SERVICES API RESPONSE:", response);
-
-      /*
-       * Axios response:
-       *
-       * response
-       *   └── data
-       *        ├── success
-       *        ├── data       <-- actual section
-       *        ├── counters
-       *        └── image_url
-       *
-       * Therefore:
-       *
-       * response.data.data
-       */
-
-      const apiResponse =
-        response?.data ?? response ?? {};
-
-      const section =
-        apiResponse?.data ?? apiResponse ?? {};
-
-      console.log("SERVICES SECTION:", section);
-
-      /* =====================================================
-         FORM
-      ===================================================== */
+      const section = response?.data || {};
 
       setForm({
         id: section.id ?? 1,
@@ -136,84 +105,29 @@ export default function Services() {
         panel_btn_text: section.panel_btn_text ?? "",
         panel_btn_link: section.panel_btn_link ?? "",
 
-        stats_badge_text:
-          section.stats_badge_text ?? "",
-
-        stats_title:
-          section.stats_title ?? "",
-
-        stats_description:
-          section.stats_description ?? "",
-
-        stats_btn_text:
-          section.stats_btn_text ?? "",
-
-        stats_btn_link:
-          section.stats_btn_link ?? "",
+        stats_badge_text: section.stats_badge_text ?? "",
+        stats_title: section.stats_title ?? "",
+        stats_description: section.stats_description ?? "",
+        stats_btn_text: section.stats_btn_text ?? "",
+        stats_btn_link: section.stats_btn_link ?? "",
       });
 
-      /* =====================================================
-         IMAGE
-      ===================================================== */
-
-      setCurrentPanelImage(
-        section.panel_image ||
-        apiResponse.image_url ||
-        null
+      setCounters(
+        Array.isArray(response?.counters) ? response.counters : []
       );
 
-      /* =====================================================
-         LOAD SERVICE ITEMS
-      ===================================================== */
+      setCurrentPanelImage(section.panel_image || null);
 
-      if (
-        servicesApi.items &&
-        typeof servicesApi.items.list === "function"
-      ) {
+      const servicesResponse = await servicesApi.items.list();
 
-        const servicesResponse =
-          await servicesApi.items.list();
-
-        /*
-         * Support both:
-         *
-         * Axios:
-         * response.data.data
-         *
-         * Direct array:
-         * [...]
-         */
-
-        const servicesData =
-          servicesResponse?.data?.data ??
-          servicesResponse?.data ??
-          servicesResponse ??
-          [];
-
-        setServices(
-          Array.isArray(servicesData)
-            ? servicesData
-            : []
-        );
-
-      } else {
-
-        setServices([]);
-
-      }
+      setServices(
+        Array.isArray(servicesResponse) ? servicesResponse : []
+      );
 
     } catch (err) {
 
-      console.error(
-        "Services load error:",
-        err
-      );
-
       setError(
-        err?.response?.data?.error ||
-        err?.response?.data?.message ||
-        err?.message ||
-        "Failed to load Services section."
+        err?.message || "Failed to load Services section."
       );
 
     } finally {
@@ -229,15 +143,30 @@ export default function Services() {
 
   function handleChange(e) {
 
-    const {
-      name,
-      value,
-    } = e.target;
+    const { name, value } = e.target;
 
     setForm(previous => ({
       ...previous,
       [name]: value,
     }));
+
+    setError("");
+    setSuccess("");
+  }
+
+  /* =========================================================
+     HANDLE COUNTER INPUT
+     (values only — edit only, no add/remove; the backend only
+     ever UPDATEs rows by existing id)
+  ========================================================= */
+
+  function handleCounterChange(index, field, value) {
+
+    setCounters(previous =>
+      previous.map((counter, i) =>
+        i === index ? { ...counter, [field]: value } : counter
+      )
+    );
 
     setError("");
     setSuccess("");
@@ -264,23 +193,15 @@ export default function Services() {
 
     if (!allowedTypes.includes(file.type)) {
 
-      setError(
-        "Only JPG, PNG, WEBP and GIF images are allowed."
-      );
-
+      setError("Only JPG, PNG, WEBP and GIF images are allowed.");
       e.target.value = "";
-
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
 
-      setError(
-        "Image size must be less than 5 MB."
-      );
-
+      setError("Image size must be less than 5 MB.");
       e.target.value = "";
-
       return;
     }
 
@@ -288,21 +209,14 @@ export default function Services() {
       URL.revokeObjectURL(panelPreview);
     }
 
-    const previewUrl =
-      URL.createObjectURL(file);
-
     setNewPanelImage(file);
-    setPanelPreview(previewUrl);
+    setPanelPreview(URL.createObjectURL(file));
 
     setError("");
     setSuccess("");
 
     e.target.value = "";
   }
-
-  /* =========================================================
-     REMOVE NEW IMAGE
-  ========================================================= */
 
   function removeNewImage() {
 
@@ -318,7 +232,11 @@ export default function Services() {
   }
 
   /* =========================================================
-     SAVE SERVICES SECTION
+     SAVE SERVICES SECTION + COUNTERS + IMAGE
+
+     services/index.php handles the section, the panel image,
+     and all counters in ONE request — same as hero/index.php —
+     so this fires exactly one servicesApi.update() call.
   ========================================================= */
 
   async function handleSave(e) {
@@ -335,12 +253,6 @@ export default function Services() {
 
     try {
 
-      /*
-       * IMPORTANT:
-       *
-       * Your PHP backend expects these exact names.
-       */
-
       const fields = {
         id: form.id ?? 1,
 
@@ -351,75 +263,33 @@ export default function Services() {
         panel_btn_text: form.panel_btn_text,
         panel_btn_link: form.panel_btn_link,
 
-        stats_badge_text:
-          form.stats_badge_text,
+        stats_badge_text: form.stats_badge_text,
+        stats_title: form.stats_title,
+        stats_description: form.stats_description,
+        stats_btn_text: form.stats_btn_text,
+        stats_btn_link: form.stats_btn_link,
 
-        stats_title:
-          form.stats_title,
-
-        stats_description:
-          form.stats_description,
-
-        stats_btn_text:
-          form.stats_btn_text,
-
-        stats_btn_link:
-          form.stats_btn_link,
+        counters: counters.map((counter, index) => ({
+          id: counter.id,
+          icon: counter.icon || "",
+          value: counter.value || "",
+          label: counter.label || "",
+          display_order: Number(counter.display_order) || index + 1,
+        })),
       };
-
-      /*
-       * If an image was selected,
-       * servicesApi.update() must convert
-       * this object into FormData.
-       */
 
       if (newPanelImage) {
         fields.panel_image = newPanelImage;
       }
 
-      console.log(
-        "SERVICES SAVE DATA:",
-        fields
-      );
-
-      const response =
-        await servicesApi.update(fields);
-
-      console.log(
-        "SERVICES SAVE RESPONSE:",
-        response
-      );
-
-      /*
-       * Axios response:
-       *
-       * response.data = PHP JSON
-       */
-
-      const result =
-        response?.data ?? response ?? {};
-
-      if (result.success === false) {
-
-        throw new Error(
-          result.error ||
-          result.message ||
-          "Services section update failed."
-        );
-      }
+      const response = await servicesApi.update(fields);
 
       setSuccess(
-        result.message ||
-        (
-          newPanelImage
-            ? "Services section and image updated successfully."
-            : "Services section updated successfully."
-        )
+        response?.message ||
+          (newPanelImage
+            ? "Services section, counters, and image updated successfully."
+            : "Services section and counters updated successfully.")
       );
-
-      /* =====================================================
-         CLEAN PREVIEW
-      ===================================================== */
 
       if (panelPreview) {
         URL.revokeObjectURL(panelPreview);
@@ -428,24 +298,12 @@ export default function Services() {
       setNewPanelImage(null);
       setPanelPreview(null);
 
-      /* =====================================================
-         RELOAD FROM DATABASE
-      ===================================================== */
-
       await loadServices();
 
     } catch (err) {
 
-      console.error(
-        "Services save error:",
-        err
-      );
-
       setError(
-        err?.response?.data?.error ||
-        err?.response?.data?.message ||
-        err?.message ||
-        "Unable to update Services section."
+        err?.message || "Unable to update Services section."
       );
 
     } finally {
@@ -459,11 +317,7 @@ export default function Services() {
      SERVICE ITEM CHANGE
   ========================================================= */
 
-  function handleServiceChange(
-    index,
-    field,
-    value
-  ) {
+  function handleServiceChange(index, field, value) {
 
     setServices(previous =>
       previous.map((service, i) =>
@@ -472,9 +326,7 @@ export default function Services() {
               ...service,
               [field]:
                 field === "display_order"
-                  ? value === ""
-                    ? ""
-                    : Number(value)
+                  ? value === "" ? "" : Number(value)
                   : value,
             }
           : service
@@ -493,10 +345,7 @@ export default function Services() {
 
     if (!service?.id) {
 
-      setError(
-        "Service ID is missing."
-      );
-
+      setError("Service ID is missing.");
       return;
     }
 
@@ -505,75 +354,31 @@ export default function Services() {
     }
 
     setServiceSaving(service.id);
-
     setError("");
     setSuccess("");
 
     try {
 
-      const response =
-        await servicesApi.items.update(
-          service.id,
-          {
-            icon: service.icon || "",
-            title: service.title || "",
-            description:
-              service.description || "",
-            display_order:
-              Number(
-                service.display_order
-              ) || 0,
-          }
-        );
-
-      const result =
-        response?.data ?? response ?? {};
-
-      if (result.success === false) {
-
-        throw new Error(
-          result.error ||
-          result.message ||
-          "Failed to update service."
-        );
-      }
+      await servicesApi.items.update(service.id, {
+        icon: service.icon || "",
+        title: service.title || "",
+        description: service.description || "",
+        display_order: Number(service.display_order) || 0,
+      });
 
       setSuccess(
         `"${service.title || "Service"}" updated successfully.`
       );
 
-      /* ===================================================
-         RELOAD ITEMS
-      =================================================== */
-
-      const updatedResponse =
-        await servicesApi.items.list();
-
-      const updatedData =
-        updatedResponse?.data?.data ??
-        updatedResponse?.data ??
-        updatedResponse ??
-        [];
+      const updatedServices = await servicesApi.items.list();
 
       setServices(
-        Array.isArray(updatedData)
-          ? updatedData
-          : []
+        Array.isArray(updatedServices) ? updatedServices : []
       );
 
     } catch (err) {
 
-      console.error(
-        "Service update error:",
-        err
-      );
-
-      setError(
-        err?.response?.data?.error ||
-        err?.response?.data?.message ||
-        err?.message ||
-        "Failed to update service."
-      );
+      setError(err?.message || "Failed to update service.");
 
     } finally {
 
@@ -589,31 +394,16 @@ export default function Services() {
 
     return (
       <div className="loading-state">
-
-        <div
-          className="spinner-border"
-          role="status"
-        >
-          <span className="visually-hidden">
-            Loading...
-          </span>
+        <div className="spinner-border" role="status">
+          <span className="visually-hidden">Loading...</span>
         </div>
-
-        <span>
-          Loading Services...
-        </span>
-
+        <span>Loading Services...</span>
       </div>
     );
   }
 
-  /* =========================================================
-     IMAGE
-  ========================================================= */
-
   const displayedPanelImage =
-    panelPreview ||
-    getImageUrl(currentPanelImage);
+    panelPreview || getImageUrl(currentPanelImage);
 
   /* =========================================================
      PAGE
@@ -622,69 +412,29 @@ export default function Services() {
   return (
     <>
 
-      {/* =====================================================
-          HEADER
-      ===================================================== */}
-
       <div className="page-header">
-
         <div>
-
-          <h1>
-            Services
-          </h1>
-
+          <h1>Services</h1>
           <p>
-            Manage the Services section
-            and service items displayed
-            on the homepage.
+            Manage the Services section, track-record stats, and
+            service items displayed on the homepage.
           </p>
-
         </div>
-
       </div>
 
-      {/* =====================================================
-          ERROR
-      ===================================================== */}
-
       {error && (
-
-        <div
-          className="alert alert-danger p-3 mb-3"
-          role="alert"
-        >
-
+        <div className="alert alert-danger p-3 mb-3" role="alert">
           <i className="bi bi-exclamation-triangle me-2" />
-
           {error}
-
         </div>
-
       )}
-
-      {/* =====================================================
-          SUCCESS
-      ===================================================== */}
 
       {success && (
-
-        <div
-          className="alert alert-success p-3 mb-3"
-          role="alert"
-        >
-
+        <div className="alert alert-success p-3 mb-3" role="alert">
           <i className="bi bi-check-circle me-2" />
-
           {success}
-
         </div>
-
       )}
-
-      {/* =====================================================
-          SECTION MANAGER
-      ===================================================== */}
 
       <div className="split-manager">
 
@@ -695,20 +445,10 @@ export default function Services() {
         <div className="content-card form-card">
 
           <div className="card-heading">
-
             <div>
-
-              <h3>
-                Panel Image
-              </h3>
-
-              <p>
-                Image displayed in the
-                Services section panel.
-              </p>
-
+              <h3>Panel Image</h3>
+              <p>Image displayed in the Services section panel.</p>
             </div>
-
           </div>
 
           {displayedPanelImage ? (
@@ -722,13 +462,8 @@ export default function Services() {
           ) : (
 
             <div className="image-placeholder">
-
               <i className="bi bi-image" />
-
-              <span>
-                No image uploaded
-              </span>
-
+              <span>No image uploaded</span>
             </div>
 
           )}
@@ -737,20 +472,10 @@ export default function Services() {
 
             <label
               className="admin-btn btn btn-sm mb-0"
-              style={{
-                cursor:
-                  saving
-                    ? "not-allowed"
-                    : "pointer",
-              }}
+              style={{ cursor: saving ? "not-allowed" : "pointer" }}
             >
-
               <i className="bi bi-upload me-2" />
-
-              {newPanelImage
-                ? "Change Image"
-                : "Choose Image"}
-
+              {newPanelImage ? "Change Image" : "Choose Image"}
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/gif"
@@ -758,62 +483,28 @@ export default function Services() {
                 disabled={saving}
                 onChange={handleImagePick}
               />
-
             </label>
 
             {newPanelImage && (
-
               <button
                 type="button"
                 className="btn btn-outline-danger btn-sm"
                 onClick={removeNewImage}
                 disabled={saving}
               >
-
                 <i className="bi bi-x-lg me-2" />
-
                 Cancel New Image
-
               </button>
-
             )}
 
           </div>
 
           {newPanelImage && (
-
             <div className="mt-2 text-muted">
-
               <i className="bi bi-file-image me-2" />
-
-              Selected:{" "}
-
-              <strong>
-                {newPanelImage.name}
-              </strong>
-
+              Selected: <strong>{newPanelImage.name}</strong>
             </div>
-
           )}
-
-          {!newPanelImage &&
-            currentPanelImage && (
-
-              <div className="mt-2 text-muted">
-
-                <small>
-
-                  Current image:{" "}
-
-                  <strong>
-                    {currentPanelImage}
-                  </strong>
-
-                </small>
-
-              </div>
-
-            )}
 
         </div>
 
@@ -821,41 +512,21 @@ export default function Services() {
             CONTENT
         ==================================================== */}
 
-        <form
-          className="content-card form-card"
-          onSubmit={handleSave}
-        >
+        <form className="content-card form-card" onSubmit={handleSave}>
 
           <div className="card-heading">
-
             <div>
-
-              <h3>
-                Section Content
-              </h3>
-
-              <p>
-                Edit the Services section
-                content.
-              </p>
-
+              <h3>Section Content</h3>
+              <p>Edit the Services section content.</p>
             </div>
-
           </div>
 
           <div className="row g-3">
 
-            {/* TITLE */}
-
             <div className="col-12">
-
-              <label
-                className="form-label"
-                htmlFor="title"
-              >
+              <label className="form-label" htmlFor="title">
                 Section Title
               </label>
-
               <input
                 id="title"
                 type="text"
@@ -864,20 +535,12 @@ export default function Services() {
                 value={form.title}
                 onChange={handleChange}
               />
-
             </div>
 
-            {/* SUBTITLE */}
-
             <div className="col-12">
-
-              <label
-                className="form-label"
-                htmlFor="subtitle"
-              >
+              <label className="form-label" htmlFor="subtitle">
                 Section Subtitle
               </label>
-
               <textarea
                 id="subtitle"
                 className="form-input form-control"
@@ -886,30 +549,16 @@ export default function Services() {
                 onChange={handleChange}
                 rows={3}
               />
-
             </div>
 
-            {/* PANEL */}
-
             <div className="col-12">
-
-              <div className="form-section-title mb-0 mt-2">
-                Panel
-              </div>
-
+              <div className="form-section-title mb-0 mt-2">Panel</div>
             </div>
 
-            {/* PANEL TITLE */}
-
             <div className="col-12">
-
-              <label
-                className="form-label"
-                htmlFor="panel_title"
-              >
+              <label className="form-label" htmlFor="panel_title">
                 Panel Title
               </label>
-
               <input
                 id="panel_title"
                 type="text"
@@ -918,20 +567,12 @@ export default function Services() {
                 value={form.panel_title}
                 onChange={handleChange}
               />
-
             </div>
 
-            {/* PANEL BUTTON TEXT */}
-
             <div className="col-md-6">
-
-              <label
-                className="form-label"
-                htmlFor="panel_btn_text"
-              >
+              <label className="form-label" htmlFor="panel_btn_text">
                 Panel Button Text
               </label>
-
               <input
                 id="panel_btn_text"
                 type="text"
@@ -940,20 +581,12 @@ export default function Services() {
                 value={form.panel_btn_text}
                 onChange={handleChange}
               />
-
             </div>
 
-            {/* PANEL BUTTON LINK */}
-
             <div className="col-md-6">
-
-              <label
-                className="form-label"
-                htmlFor="panel_btn_link"
-              >
+              <label className="form-label" htmlFor="panel_btn_link">
                 Panel Button Link
               </label>
-
               <input
                 id="panel_btn_link"
                 type="text"
@@ -962,30 +595,16 @@ export default function Services() {
                 value={form.panel_btn_link}
                 onChange={handleChange}
               />
-
             </div>
-
-            {/* STATS */}
 
             <div className="col-12">
-
-              <div className="form-section-title mb-0 mt-2">
-                Stats
-              </div>
-
+              <div className="form-section-title mb-0 mt-2">Stats</div>
             </div>
 
-            {/* STATS BADGE */}
-
             <div className="col-md-6">
-
-              <label
-                className="form-label"
-                htmlFor="stats_badge_text"
-              >
+              <label className="form-label" htmlFor="stats_badge_text">
                 Stats Badge Text
               </label>
-
               <input
                 id="stats_badge_text"
                 type="text"
@@ -994,20 +613,12 @@ export default function Services() {
                 value={form.stats_badge_text}
                 onChange={handleChange}
               />
-
             </div>
 
-            {/* STATS TITLE */}
-
             <div className="col-md-6">
-
-              <label
-                className="form-label"
-                htmlFor="stats_title"
-              >
+              <label className="form-label" htmlFor="stats_title">
                 Stats Title
               </label>
-
               <input
                 id="stats_title"
                 type="text"
@@ -1016,20 +627,12 @@ export default function Services() {
                 value={form.stats_title}
                 onChange={handleChange}
               />
-
             </div>
 
-            {/* STATS DESCRIPTION */}
-
             <div className="col-12">
-
-              <label
-                className="form-label"
-                htmlFor="stats_description"
-              >
+              <label className="form-label" htmlFor="stats_description">
                 Stats Description
               </label>
-
               <textarea
                 id="stats_description"
                 className="form-input form-control"
@@ -1038,20 +641,12 @@ export default function Services() {
                 onChange={handleChange}
                 rows={4}
               />
-
             </div>
 
-            {/* STATS BUTTON TEXT */}
-
             <div className="col-md-6">
-
-              <label
-                className="form-label"
-                htmlFor="stats_btn_text"
-              >
+              <label className="form-label" htmlFor="stats_btn_text">
                 Stats Button Text
               </label>
-
               <input
                 id="stats_btn_text"
                 type="text"
@@ -1060,20 +655,12 @@ export default function Services() {
                 value={form.stats_btn_text}
                 onChange={handleChange}
               />
-
             </div>
 
-            {/* STATS BUTTON LINK */}
-
             <div className="col-md-6">
-
-              <label
-                className="form-label"
-                htmlFor="stats_btn_link"
-              >
+              <label className="form-label" htmlFor="stats_btn_link">
                 Stats Button Link
               </label>
-
               <input
                 id="stats_btn_link"
                 type="text"
@@ -1082,45 +669,118 @@ export default function Services() {
                 value={form.stats_btn_link}
                 onChange={handleChange}
               />
-
             </div>
 
           </div>
 
-          {/* SAVE */}
+          {/* =================================================
+              TRACK-RECORD COUNTERS — edit values only,
+              no add/remove
+          ================================================== */}
+
+          <div className="mt-4">
+
+            <div className="card-heading">
+              <div>
+                <h3>Track-Record Stats</h3>
+                <p>Edit the 4 stat counters shown in the Services section.</p>
+              </div>
+            </div>
+
+            <div className="row g-3">
+              {counters.map((counter, index) => (
+                <div className="col-12" key={counter.id ?? `counter-${index}`}>
+                  <div className="border rounded p-3">
+                    <div className="row g-3">
+
+                      <div className="col-md-3">
+                        <label className="form-label">Icon</label>
+                        <input
+                          type="text"
+                          className="form-input form-control"
+                          value={counter.icon || ""}
+                          onChange={(e) =>
+                            handleCounterChange(index, "icon", e.target.value)
+                          }
+                          placeholder="bi-bar-chart"
+                        />
+                      </div>
+
+                      <div className="col-md-3">
+                        <label className="form-label">Value</label>
+                        <input
+                          type="text"
+                          className="form-input form-control"
+                          value={counter.value || ""}
+                          onChange={(e) =>
+                            handleCounterChange(index, "value", e.target.value)
+                          }
+                          placeholder="850+"
+                        />
+                      </div>
+
+                      <div className="col-md-4">
+                        <label className="form-label">Label</label>
+                        <input
+                          type="text"
+                          className="form-input form-control"
+                          value={counter.label || ""}
+                          onChange={(e) =>
+                            handleCounterChange(index, "label", e.target.value)
+                          }
+                          placeholder="Projects Delivered"
+                        />
+                      </div>
+
+                      <div className="col-md-2">
+                        <label className="form-label">Order</label>
+                        <input
+                          type="number"
+                          min="1"
+                          className="form-input form-control"
+                          value={counter.display_order || ""}
+                          onChange={(e) =>
+                            handleCounterChange(
+                              index,
+                              "display_order",
+                              e.target.value
+                            )
+                          }
+                        />
+                      </div>
+
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {counters.length === 0 && (
+              <div className="alert alert-secondary">
+                No Services counters found.
+              </div>
+            )}
+
+          </div>
 
           <div className="form-actions-modern">
-
-            <button
-              className="admin-btn btn"
-              type="submit"
-              disabled={saving}
-            >
-
+            <button className="admin-btn btn" type="submit" disabled={saving}>
               {saving ? (
-
                 <>
                   <span
                     className="spinner-border spinner-border-sm me-2"
                     role="status"
                     aria-hidden="true"
                   />
-
                   Saving...
                 </>
-
               ) : (
-
                 <>
                   <i className="bi bi-check-lg me-2" />
-
                   Save Changes
                 </>
-
               )}
-
             </button>
-
           </div>
 
         </form>
@@ -1134,210 +794,117 @@ export default function Services() {
       <div className="content-card list-card mt-3">
 
         <div className="card-heading">
-
           <div>
-
-            <h3>
-              Services List
-            </h3>
-
+            <h3>Services List</h3>
             <span>
-              Edit each service's icon,
-              title, description, and
+              Edit each service's icon, title, description, and
               display order.
             </span>
-
           </div>
-
         </div>
 
         <div className="stack-list">
 
-          {services.map(
-            (service, index) => (
+          {services.map((service, index) => (
+
+            <div className="data-item" key={service.id ?? `service-${index}`}>
+
+              <div className="data-icon">
+                <i className={`bi ${service.icon || "bi-tools"}`} />
+              </div>
 
               <div
-                className="data-item"
-                key={
-                  service.id ??
-                  `service-${index}`
-                }
+                className="data-info"
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                  flex: 1,
+                }}
               >
 
-                {/* ICON PREVIEW */}
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
 
-                <div className="data-icon">
-
-                  <i
-                    className={`bi ${
-                      service.icon ||
-                      "bi-tools"
-                    }`}
+                  <input
+                    type="text"
+                    className="form-input form-control form-control-sm"
+                    style={{ maxWidth: 180 }}
+                    value={service.icon || ""}
+                    onChange={(e) =>
+                      handleServiceChange(index, "icon", e.target.value)
+                    }
+                    placeholder="bi-tools"
                   />
 
-                </div>
-
-                {/* SERVICE CONTENT */}
-
-                <div
-                  className="data-info"
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 8,
-                    flex: 1,
-                  }}
-                >
-
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 10,
-                      flexWrap: "wrap",
-                    }}
-                  >
-
-                    {/* ICON */}
-
-                    <input
-                      type="text"
-                      className="form-input form-control form-control-sm"
-                      style={{
-                        maxWidth: 180,
-                      }}
-                      value={
-                        service.icon || ""
-                      }
-                      onChange={(e) =>
-                        handleServiceChange(
-                          index,
-                          "icon",
-                          e.target.value
-                        )
-                      }
-                      placeholder="bi-tools"
-                    />
-
-                    {/* TITLE */}
-
-                    <input
-                      type="text"
-                      className="form-input form-control form-control-sm"
-                      style={{
-                        flex: 1,
-                        minWidth: 180,
-                      }}
-                      value={
-                        service.title || ""
-                      }
-                      onChange={(e) =>
-                        handleServiceChange(
-                          index,
-                          "title",
-                          e.target.value
-                        )
-                      }
-                      placeholder="Service title"
-                    />
-
-                    {/* ORDER */}
-
-                    <input
-                      type="number"
-                      className="form-input form-control form-control-sm"
-                      style={{
-                        maxWidth: 100,
-                      }}
-                      value={
-                        service.display_order ?? ""
-                      }
-                      onChange={(e) =>
-                        handleServiceChange(
-                          index,
-                          "display_order",
-                          e.target.value
-                        )
-                      }
-                      placeholder="Order"
-                    />
-
-                  </div>
-
-                  {/* DESCRIPTION */}
-
-                  <textarea
+                  <input
+                    type="text"
                     className="form-input form-control form-control-sm"
-                    value={
-                      service.description || ""
+                    style={{ flex: 1, minWidth: 180 }}
+                    value={service.title || ""}
+                    onChange={(e) =>
+                      handleServiceChange(index, "title", e.target.value)
                     }
+                    placeholder="Service title"
+                  />
+
+                  <input
+                    type="number"
+                    className="form-input form-control form-control-sm"
+                    style={{ maxWidth: 100 }}
+                    value={service.display_order ?? ""}
                     onChange={(e) =>
                       handleServiceChange(
                         index,
-                        "description",
+                        "display_order",
                         e.target.value
                       )
                     }
-                    placeholder="Service description"
-                    rows={3}
+                    placeholder="Order"
                   />
 
                 </div>
 
-                {/* SAVE */}
-
-                <div className="data-actions">
-
-                  <button
-                    className="btn-icon"
-                    type="button"
-                    disabled={
-                      serviceSaving ===
-                      service.id
-                    }
-                    onClick={() =>
-                      handleServiceSave(
-                        service
-                      )
-                    }
-                    title="Save service"
-                  >
-
-                    {serviceSaving ===
-                    service.id ? (
-
-                      <span
-                        className="spinner-border spinner-border-sm"
-                        role="status"
-                        aria-hidden="true"
-                      />
-
-                    ) : (
-
-                      <i className="bi bi-check2" />
-
-                    )}
-
-                  </button>
-
-                </div>
+                <textarea
+                  className="form-input form-control form-control-sm"
+                  value={service.description || ""}
+                  onChange={(e) =>
+                    handleServiceChange(index, "description", e.target.value)
+                  }
+                  placeholder="Service description"
+                  rows={3}
+                />
 
               </div>
 
-            )
-          )}
-
-          {services.length === 0 && (
-
-            <div className="empty-state">
-
-              <i className="bi bi-tools mb-2" />
-
-              <div>
-                No services found.
+              <div className="data-actions">
+                <button
+                  className="btn-icon"
+                  type="button"
+                  disabled={serviceSaving === service.id}
+                  onClick={() => handleServiceSave(service)}
+                  title="Save service"
+                >
+                  {serviceSaving === service.id ? (
+                    <span
+                      className="spinner-border spinner-border-sm"
+                      role="status"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <i className="bi bi-check2" />
+                  )}
+                </button>
               </div>
 
             </div>
 
+          ))}
+
+          {services.length === 0 && (
+            <div className="empty-state">
+              <i className="bi bi-tools mb-2" />
+              <div>No services found.</div>
+            </div>
           )}
 
         </div>

@@ -1,4 +1,3 @@
-
 import React from "react";
 import { NavLink } from "react-router-dom";
 
@@ -33,11 +32,6 @@ const menuItems = [
     label: "Projects",
     icon: "bi-buildings-fill",
   },
-  {
-    path: "/admin/project-categories",
-    label: "Categories",
-    icon: "bi-tags-fill",
-  },
 ];
 
 export default function Sidebar({ open, onClose }) {
@@ -51,14 +45,14 @@ export default function Sidebar({ open, onClose }) {
       )}
 
       <aside
-        className={`admin-sidebar ${
-          open ? "sidebar-open" : ""
-        }`}
+        className={`admin-sidebar ${open ? "sidebar-open" : ""
+          }`}
       >
 
         <div className="sidebar-brand">
 
           <div className="brand-mark small">
+            <i className="bi bi-buildings-fill"></i>
           </div>
 
           <div>

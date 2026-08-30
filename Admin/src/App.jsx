@@ -18,7 +18,7 @@ import Hero from "./pages/Hero";
 import About from "./pages/About";
 import Services from "./pages/Services";
 import Projects from "./pages/Projects";
-import ProjectCategories from "./pages/ProjectCategories";
+
 
 
 export default function App() {
@@ -68,11 +68,6 @@ export default function App() {
             <Route
               path="projects"
               element={<Projects />}
-            />
-
-            <Route
-              path="project-categories"
-              element={<ProjectCategories />}
             />
 
 

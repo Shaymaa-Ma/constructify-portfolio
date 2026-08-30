@@ -418,7 +418,7 @@ if ($method === 'GET') {
 
 if ($method === 'POST') {
 
-    require_auth();
+    require_admin();
 
 
     $input =
@@ -652,7 +652,7 @@ if (
     $method === 'PATCH'
 ) {
 
-    require_auth();
+    require_admin();
 
 
     $input =
@@ -987,7 +987,7 @@ if (
 
 if ($method === 'DELETE') {
 
-    require_auth();
+    require_admin();
 
 
     $id = isset($_GET['id'])

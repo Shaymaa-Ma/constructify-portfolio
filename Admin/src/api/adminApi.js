@@ -404,6 +404,8 @@ async function parseResponse(
 
   let body = null;
 
+  let rawText = null;
+
 
   const contentType =
     response.headers.get(
@@ -426,22 +428,20 @@ async function parseResponse(
 
     } else {
 
-      const text =
+      rawText =
         await response.text();
 
 
-      if (text.trim()) {
+      if (rawText.trim()) {
 
         try {
 
           body =
-            JSON.parse(text);
+            JSON.parse(rawText);
 
         } catch {
 
-          body = {
-            raw: text
-          };
+          body = null;
 
         }
 
@@ -450,6 +450,25 @@ async function parseResponse(
     }
 
   } catch (error) {
+
+    /*
+     * response.json() threw — the server said it was JSON but
+     * the body didn't actually parse (almost always a PHP
+     * warning/notice printed before the real json_encode()
+     * output, which corrupts it). Read the raw text so we can
+     * surface what the server actually sent instead of
+     * silently pretending nothing happened.
+     */
+
+    try {
+
+      rawText = await response.clone().text();
+
+    } catch {
+
+      rawText = null;
+
+    }
 
     body = null;
 
@@ -477,7 +496,9 @@ async function parseResponse(
       body?.error ||
       body?.message ||
       body?.raw ||
-      `Request failed (HTTP ${response.status})`;
+      (rawText && rawText.trim()
+        ? `Server returned an unexpected response: ${rawText.slice(0, 300)}`
+        : `Request failed (HTTP ${response.status})`);
 
 
     throw new Error(
@@ -504,7 +525,29 @@ async function parseResponse(
   }
 
 
-  return body || {};
+  /*
+   * The request came back HTTP 200 but the body never parsed
+   * as JSON. Previously this silently returned {} here, which
+   * looked exactly like success to every caller (no thrown
+   * error, no success:false) even though nothing the server
+   * did actually reached the frontend. Throw instead, with
+   * whatever raw text the server sent, so the real problem
+   * (almost always a stray PHP warning/notice printed before
+   * the JSON) is visible instead of masquerading as success.
+   */
+
+  if (body === null) {
+
+    throw new Error(
+      rawText && rawText.trim()
+        ? `Server response wasn't valid JSON: ${rawText.slice(0, 300)}`
+        : "Server returned an empty response."
+    );
+
+  }
+
+
+  return body;
 
 }
 
@@ -968,39 +1011,93 @@ export const siteSettingsApi = {
 
 
   /*
-   * PUT
+   * UPDATE
    *
-   * /admin/site-settings/index.php
-   */
-  update: (
-    fields
-  ) =>
-    request(
-      "PUT",
-      "/site-settings/index.php",
-      {
-        body: fields,
-      }
-    ),
-
-
-  /*
-   * Multipart update.
+   * PHP expects:
    *
-   * Useful if Site Settings contains
-   * an image upload.
+   * POST + _method=PUT
+   *
+   * Same approach as Hero / About / Services.
    */
-  updateWithImage: (
-    fields
+  update: async (
+    fields = {}
   ) => {
 
     const formData =
-      createFormData({
-        ...fields,
+      new FormData();
 
-        _method: "PUT",
-      });
 
+    /* -----------------------------------------------------
+       ID
+    ----------------------------------------------------- */
+
+    if (
+      fields.id !== undefined &&
+      fields.id !== null &&
+      fields.id !== ""
+    ) {
+
+      formData.append(
+        "id",
+        String(fields.id)
+      );
+
+    }
+
+
+    /* -----------------------------------------------------
+       METHOD OVERRIDE
+    ----------------------------------------------------- */
+
+    formData.append(
+      "_method",
+      "PUT"
+    );
+
+
+    /* -----------------------------------------------------
+       SITE SETTINGS FIELDS
+    ----------------------------------------------------- */
+
+    const settingsFields = [
+
+      "company_name",
+
+      "phone",
+
+      "email",
+
+      "logo_icon",
+
+      "cta_text",
+
+      "cta_link",
+
+    ];
+
+
+    settingsFields.forEach(
+      (field) => {
+
+        if (
+          fields[field] !== undefined &&
+          fields[field] !== null
+        ) {
+
+          formData.append(
+            field,
+            String(fields[field])
+          );
+
+        }
+
+      }
+    );
+
+
+    /* -----------------------------------------------------
+       SEND
+    ----------------------------------------------------- */
 
     return formRequest(
       "POST",
@@ -1008,6 +1105,20 @@ export const siteSettingsApi = {
       {
         formData,
       }
+    );
+
+  },
+
+
+  /*
+   * Compatibility method.
+   */
+  updateWithImage: async (
+    fields = {}
+  ) => {
+
+    return siteSettingsApi.update(
+      fields
     );
 
   },
@@ -1708,6 +1819,11 @@ export const servicesApi = {
 
     /* -----------------------------------------------------
        COUNTERS
+
+       PHP expects a JSON string (it json_decode()s this
+       field itself), so this must stay a single stringified
+       value, not counters[0][icon] style nested keys like
+       hero uses.
     ----------------------------------------------------- */
 
     if (
@@ -1719,27 +1835,6 @@ export const servicesApi = {
         JSON.stringify(
           fields.counters
         )
-      );
-
-    }
-
-
-    /* -----------------------------------------------------
-       DEBUG
-    ----------------------------------------------------- */
-
-    console.log(
-      "SERVICES UPDATE FORM DATA:"
-    );
-
-    for (
-      const [key, value]
-      of formData.entries()
-    ) {
-
-      console.log(
-        key,
-        value
       );
 
     }
@@ -1934,27 +2029,6 @@ export const servicesApi = {
 
 
       /* ---------------------------------------------------
-         DEBUG
-      --------------------------------------------------- */
-
-      console.log(
-        "SERVICE ITEM UPDATE:"
-      );
-
-      for (
-        const [key, value]
-        of formData.entries()
-      ) {
-
-        console.log(
-          key,
-          value
-        );
-
-      }
-
-
-      /* ---------------------------------------------------
          SEND
       --------------------------------------------------- */
 
@@ -1972,7 +2046,7 @@ export const servicesApi = {
     /* -----------------------------------------------------
        UPDATE SERVICE WITH IMAGE
        -----------------------------------------------------
-       Not currently needed because your PHP service-item
+       Not currently needed because the PHP service-item
        endpoint has no image field.
     */
 
@@ -1996,188 +2070,80 @@ export const servicesApi = {
 
 /* =========================================================
    CATEGORIES API
-   FULL CRUD
+   FULL CRUD — no image field (project_categories has none)
 ========================================================= */
 
 export const categoriesApi = {
 
   /*
    * GET ALL
-   *
    * /admin/categories/index.php
    */
   list: async () => {
 
-    const res =
-      await request(
-        "GET",
-        "/categories/index.php"
-      );
-
+    const res = await request("GET", "/categories/index.php");
 
     return res.data || [];
-
   },
 
 
   /*
    * GET ONE
    */
-  getOne: async (
-    id
-  ) => {
+  getOne: async (id) => {
 
-    const res =
-      await request(
-        "GET",
-        "/categories/index.php",
-        {
-          params: {
-            id,
-          },
-        }
-      );
-
+    const res = await request(
+      "GET",
+      "/categories/index.php",
+      { params: { id } }
+    );
 
     return res.data;
-
   },
 
 
   /*
    * CREATE
+   * Returns the FULL response { success, message, data } —
+   * callers that need the created row read res.data themselves.
    */
-  create: async (
-    category
-  ) => {
-
-    if (
-      containsFile(
-        category?.image
-      )
-    ) {
-
-      const formData =
-        createFormData(
-          category
-        );
-
-
-      return formRequest(
-        "POST",
-        "/categories/index.php",
-        {
-          formData,
-        }
-      );
-
-    }
-
+  create: async (category) => {
 
     return request(
       "POST",
       "/categories/index.php",
-      {
-        body: category,
-      }
+      { body: category }
     );
-
   },
 
 
   /*
    * UPDATE
    */
-  update: async (
-    id,
-    category
-  ) => {
-
-    if (
-      containsFile(
-        category?.image
-      )
-    ) {
-
-      const formData =
-        createFormData({
-          ...category,
-
-          id,
-
-          _method: "PUT",
-        });
-
-
-      return formRequest(
-        "POST",
-        "/categories/index.php",
-        {
-          formData,
-        }
-      );
-
-    }
-
+  update: async (id, category) => {
 
     return request(
       "PUT",
       "/categories/index.php",
       {
-        params: {
-          id,
-        },
-
+        params: { id },
         body: category,
       }
     );
-
-  },
-
-
-  /*
-   * Explicit image update.
-   */
-  updateWithImage: async (
-    id,
-    category
-  ) => {
-
-    const formData =
-      createFormData({
-        ...category,
-
-        id,
-
-        _method: "PUT",
-      });
-
-
-    return formRequest(
-      "POST",
-      "/categories/index.php",
-      {
-        formData,
-      }
-    );
-
   },
 
 
   /*
    * DELETE
+   * Rejects with a 409 message if projects still reference
+   * this category — surfaced as a normal thrown Error by
+   * parseResponse().
    */
-  remove: (
-    id
-  ) =>
+  remove: (id) =>
     request(
       "DELETE",
       "/categories/index.php",
-      {
-        params: {
-          id,
-        },
-      }
+      { params: { id } }
     ),
 
 };
@@ -2185,212 +2151,124 @@ export const categoriesApi = {
 
 /* =========================================================
    PROJECTS API
-   FULL CRUD
+   FULL CRUD, with image upload support
 ========================================================= */
 
 export const projectsApi = {
 
   /*
-   * GET ALL
+   * GET ALL (optionally filtered by category)
    */
-  list: async (
-    categoryId = ""
-  ) => {
+  list: async (categoryId = "") => {
 
     const params = {};
 
-
-    if (
-      categoryId !== "" &&
-      categoryId !== null &&
-      categoryId !== undefined
-    ) {
-
-      params.category_id =
-        categoryId;
-
+    if (categoryId !== "" && categoryId !== null && categoryId !== undefined) {
+      params.category_id = categoryId;
     }
 
-
-    const res =
-      await request(
-        "GET",
-        "/projects/index.php",
-        {
-          params,
-        }
-      );
-
+    const res = await request(
+      "GET",
+      "/projects/index.php",
+      { params }
+    );
 
     return res.data || [];
-
   },
 
 
   /*
    * GET ONE
    */
-  getOne: async (
-    id
-  ) => {
+  getOne: async (id) => {
 
-    const res =
-      await request(
-        "GET",
-        "/projects/index.php",
-        {
-          params: {
-            id,
-          },
-        }
-      );
-
+    const res = await request(
+      "GET",
+      "/projects/index.php",
+      { params: { id } }
+    );
 
     return res.data;
-
   },
 
 
   /*
    * CREATE
    *
-   * If image exists:
-   * multipart/form-data
+   * If project.image is a File/Blob, this switches to a plain
+   * multipart POST (no _method override — the backend's real
+   * POST/create branch handles it directly). Otherwise it's a
+   * regular JSON POST.
    *
-   * Otherwise:
-   * application/json
+   * Returns the FULL response { success, message, data } so
+   * callers can read the created row (with category_name/slug
+   * already joined) from res.data.
    */
-  create: async (
-    project
-  ) => {
+  create: async (project) => {
 
-    if (
-      containsFile(
-        project?.image
-      )
-    ) {
+    if (containsFile(project?.image)) {
 
-      const formData =
-        createFormData(
-          project
-        );
-
+      const formData = createFormData(project);
 
       return formRequest(
         "POST",
         "/projects/index.php",
-        {
-          formData,
-        }
+        { formData }
       );
-
     }
-
 
     return request(
       "POST",
       "/projects/index.php",
-      {
-        body: project,
-      }
+      { body: project }
     );
-
   },
 
 
   /*
    * UPDATE
+   *
+   * Same file-vs-JSON branching as create. When a file is
+   * present this must go through _method=PUT (multipart PUT
+   * bodies can't be parsed by PHP directly), matching what
+   * projects/index.php expects.
    */
-  update: async (
-    id,
-    project
-  ) => {
+  update: async (id, project) => {
 
-    if (
-      containsFile(
-        project?.image
-      )
-    ) {
+    if (containsFile(project?.image)) {
 
-      const formData =
-        createFormData({
-          ...project,
-
-          id,
-
-          _method: "PUT",
-        });
-
+      const formData = createFormData({
+        ...project,
+        id,
+        _method: "PUT",
+      });
 
       return formRequest(
         "POST",
         "/projects/index.php",
-        {
-          formData,
-        }
+        { formData }
       );
-
     }
-
 
     return request(
       "PUT",
       "/projects/index.php",
       {
-        params: {
-          id,
-        },
-
+        params: { id },
         body: project,
       }
     );
-
-  },
-
-
-  /*
-   * Explicit multipart update.
-   */
-  updateWithImage: async (
-    id,
-    project
-  ) => {
-
-    const formData =
-      createFormData({
-        ...project,
-
-        id,
-
-        _method: "PUT",
-      });
-
-
-    return formRequest(
-      "POST",
-      "/projects/index.php",
-      {
-        formData,
-      }
-    );
-
   },
 
 
   /*
    * DELETE
    */
-  remove: (
-    id
-  ) =>
+  remove: (id) =>
     request(
       "DELETE",
       "/projects/index.php",
-      {
-        params: {
-          id,
-        },
-      }
+      { params: { id } }
     ),
 
 };

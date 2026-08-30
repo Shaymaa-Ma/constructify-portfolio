@@ -1,16 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { projectsApi, categoriesApi } from '../api/adminApi';
+import { projectsApi, categoriesApi, getImageUrl } from '../api/adminApi';
 
-const IMAGE_BASE = 'http://localhost/construction-portfolio/uploads';
-
-const emptyForm = {
+const emptyProjectForm = {
   category_id: '',
   title: '',
   description: '',
   display_order: 0,
 };
 
+const emptyCategoryForm = {
+  name: '',
+  slug: '',
+  display_order: 0,
+};
+
 export default function Projects() {
+
+  const [tab, setTab] = useState('projects'); // 'projects' | 'categories'
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -18,78 +25,82 @@ export default function Projects() {
   const [projects, setProjects] = useState([]);
   const [categories, setCategories] = useState([]);
 
-  /* =========================
+  /* =========================================================
      PROJECT MODAL
-  ========================= */
+  ========================================================= */
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-
-  const [form, setForm] = useState(emptyForm);
+  const [editingProjectId, setEditingProjectId] = useState(null);
+  const [projectForm, setProjectForm] = useState(emptyProjectForm);
   const [modalSaving, setModalSaving] = useState(false);
-
-  /* =========================
-     IMAGE
-  ========================= */
 
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
 
-  /* =========================
-     DELETE
-  ========================= */
+  const [deleteProjectTarget, setDeleteProjectTarget] = useState(null);
+  const [deletingProject, setDeletingProject] = useState(false);
 
-  const [deleteTarget, setDeleteTarget] = useState(null);
-  const [deleting, setDeleting] = useState(false);
+  /* =========================================================
+     CATEGORY FORM
+  ========================================================= */
+
+  const [editingCategoryId, setEditingCategoryId] = useState(null);
+  const [categoryForm, setCategoryForm] = useState(emptyCategoryForm);
+  const [categorySaving, setCategorySaving] = useState(false);
+
+  const [deleteCategoryTarget, setDeleteCategoryTarget] = useState(null);
+  const [deletingCategory, setDeletingCategory] = useState(false);
 
   useEffect(() => {
     load();
   }, []);
 
   async function load() {
-    setLoading(true);
+  setLoading(true);
+  setError('');
+
+  try {
+    const [projectList, categoryList] = await Promise.all([
+      projectsApi.list(),
+      categoriesApi.list(),
+    ]);
+
+    console.log("PROJECTS:", projectList);
+    console.log("CATEGORIES:", categoryList);
+
+    setProjects(projectList || []);
+    setCategories(categoryList || []);
+  } catch (err) {
+    console.error("LOAD ERROR:", err);
+    setError(err.message || 'Failed to load projects.');
+  } finally {
+    setLoading(false);
+  }
+}
+
+  function switchTab(next) {
+    setTab(next);
     setError('');
-
-    try {
-      const [projectList, categoryList] = await Promise.all([
-        projectsApi.list(),
-        categoriesApi.list(),
-      ]);
-
-      setProjects(projectList || []);
-      setCategories(categoryList || []);
-    } catch (err) {
-      setError(err.message || 'Failed to load projects.');
-    } finally {
-      setLoading(false);
-    }
+    setSuccess('');
   }
 
-  /* =========================
-     ADD PROJECT
-  ========================= */
+  /* =========================================================
+     PROJECT: ADD / EDIT MODAL
+  ========================================================= */
 
   function openAddModal() {
-    setEditingId(null);
-    setForm({
-      ...emptyForm,
-    });
-
+    setEditingProjectId(null);
+    setProjectForm(emptyProjectForm);
     setImageFile(null);
     setImagePreview(null);
-
     setError('');
     setModalOpen(true);
   }
 
-  /* =========================
-     EDIT PROJECT
-  ========================= */
-
   function openEditModal(project) {
-    setEditingId(project.id);
+    setEditingProjectId(project.id);
 
-    setForm({
+    setProjectForm({
       category_id: project.category_id ?? '',
       title: project.title || '',
       description: project.description || '',
@@ -97,66 +108,36 @@ export default function Projects() {
     });
 
     setImageFile(null);
-
     setImagePreview(
-      project.image
-        ? `${IMAGE_BASE}/${project.image}`
-        : null
+      project.image ? getImageUrl(project.image) : null
     );
 
     setError('');
     setModalOpen(true);
   }
 
-  /* =========================
-     CLOSE MODAL
-  ========================= */
-
   function closeModal() {
     if (modalSaving) return;
 
     setModalOpen(false);
-    setEditingId(null);
-
-    setForm({
-      ...emptyForm,
-    });
-
+    setEditingProjectId(null);
+    setProjectForm(emptyProjectForm);
     setImageFile(null);
     setImagePreview(null);
   }
 
-  /* =========================
-     FORM CHANGE
-  ========================= */
-
-  function handleFormChange(e) {
+  function handleProjectFormChange(e) {
     const { name, value } = e.target;
-
-    setForm((current) => ({
-      ...current,
-      [name]: value,
-    }));
+    setProjectForm((current) => ({ ...current, [name]: value }));
   }
-
-  /* =========================
-     IMAGE PICK
-  ========================= */
 
   function handleImagePick(e) {
     const file = e.target.files?.[0];
-
     if (!file) return;
 
     setImageFile(file);
-
-    const preview = URL.createObjectURL(file);
-    setImagePreview(preview);
+    setImagePreview(URL.createObjectURL(file));
   }
-
-  /* =========================
-     SAVE PROJECT
-  ========================= */
 
   async function handleModalSave(e) {
     e.preventDefault();
@@ -164,12 +145,12 @@ export default function Projects() {
     setError('');
     setSuccess('');
 
-    if (!form.title.trim()) {
+    if (!projectForm.title.trim()) {
       setError('Project title is required.');
       return;
     }
 
-    if (!form.category_id) {
+    if (!projectForm.category_id) {
       setError('Please select a category.');
       return;
     }
@@ -177,95 +158,151 @@ export default function Projects() {
     setModalSaving(true);
 
     try {
-      /*
-       * IMPORTANT:
-       * The current adminApi.js accepts only the project object.
-       *
-       * imageFile is therefore NOT sent here.
-       *
-       * If your PHP API supports image upload, we should
-       * update adminApi.js to use FormData first.
-       */
 
       const projectData = {
-        category_id: Number(form.category_id),
-        title: form.title.trim(),
-        description: form.description.trim(),
-        display_order: Number(form.display_order) || 0,
+        category_id: Number(projectForm.category_id),
+        title: projectForm.title.trim(),
+        description: projectForm.description.trim(),
+        display_order: Number(projectForm.display_order) || 0,
       };
 
-      if (editingId) {
-        await projectsApi.update(
-          editingId,
-          projectData
-        );
+      // The image file (when a new one was picked) rides along in
+      // the same payload — projectsApi.create/update switch to
+      // multipart automatically whenever this is a real File.
+      if (imageFile) {
+        projectData.image = imageFile;
+      }
 
+      if (editingProjectId) {
+        await projectsApi.update(editingProjectId, projectData);
         setSuccess('Project updated successfully.');
       } else {
-        await projectsApi.create(
-          projectData
-        );
-
+        await projectsApi.create(projectData);
         setSuccess('Project created successfully.');
       }
 
       closeModal();
-
       await load();
+
     } catch (err) {
-      setError(
-        err.message ||
-          'Failed to save the project.'
-      );
+      setError(err.message || 'Failed to save the project.');
     } finally {
       setModalSaving(false);
     }
   }
 
-  /* =========================
-     DELETE PROJECT
-  ========================= */
+  async function confirmDeleteProject() {
+    if (!deleteProjectTarget) return;
 
-  async function confirmDelete() {
-    if (!deleteTarget) return;
-
-    setDeleting(true);
+    setDeletingProject(true);
     setError('');
     setSuccess('');
 
     try {
-      await projectsApi.remove(
-        deleteTarget.id
-      );
-
-      setSuccess(
-        'Project deleted successfully.'
-      );
-
-      setDeleteTarget(null);
-
+      await projectsApi.remove(deleteProjectTarget.id);
+      setSuccess('Project deleted successfully.');
+      setDeleteProjectTarget(null);
       await load();
     } catch (err) {
-      setError(
-        err.message ||
-          'Failed to delete project.'
-      );
+      setError(err.message || 'Failed to delete project.');
     } finally {
-      setDeleting(false);
+      setDeletingProject(false);
     }
   }
 
-  /* =========================
+  /* =========================================================
+     CATEGORIES
+  ========================================================= */
+
+  function startEditCategory(category) {
+    setEditingCategoryId(category.id);
+    setCategoryForm({
+      name: category.name || '',
+      slug: category.slug || '',
+      display_order: category.display_order ?? 0,
+    });
+    setError('');
+    setSuccess('');
+  }
+
+  function resetCategoryForm() {
+    setEditingCategoryId(null);
+    setCategoryForm(emptyCategoryForm);
+  }
+
+  function handleCategoryFormChange(e) {
+    const { name, value } = e.target;
+    setCategoryForm((current) => ({ ...current, [name]: value }));
+  }
+
+  async function handleCategorySubmit(e) {
+    e.preventDefault();
+
+    setError('');
+    setSuccess('');
+
+    if (!categoryForm.name.trim()) {
+      setError('Category name is required.');
+      return;
+    }
+
+    setCategorySaving(true);
+
+    try {
+
+      const categoryData = {
+        name: categoryForm.name.trim(),
+        slug: categoryForm.slug.trim(),
+        display_order: Number(categoryForm.display_order) || 0,
+      };
+
+      if (editingCategoryId) {
+        await categoriesApi.update(editingCategoryId, categoryData);
+        setSuccess('Category updated successfully.');
+      } else {
+        await categoriesApi.create(categoryData);
+        setSuccess('Category created successfully.');
+      }
+
+      resetCategoryForm();
+      await load();
+
+    } catch (err) {
+      setError(err.message || 'Failed to save category.');
+    } finally {
+      setCategorySaving(false);
+    }
+  }
+
+  async function confirmDeleteCategory() {
+    if (!deleteCategoryTarget) return;
+
+    setDeletingCategory(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      await categoriesApi.remove(deleteCategoryTarget.id);
+      setSuccess('Category deleted successfully.');
+      setDeleteCategoryTarget(null);
+      await load();
+    } catch (err) {
+      // e.g. still has projects assigned — surfaced by the API's 409
+      setError(err.message || 'Failed to delete category.');
+      setDeleteCategoryTarget(null);
+    } finally {
+      setDeletingCategory(false);
+    }
+  }
+
+  /* =========================================================
      LOADING
-  ========================= */
+  ========================================================= */
 
   if (loading) {
     return (
       <div className="loading-state">
-        <div
-          className="spinner-border"
-          role="status"
-        />
+        <div className="spinner-border" role="status" />
         <span>Loading projects…</span>
       </div>
     );
@@ -273,418 +310,402 @@ export default function Projects() {
 
   return (
     <>
-      {/* =========================
-          HEADER
-      ========================= */}
-
       <div className="page-header">
         <div>
           <h1>Projects</h1>
-          <p>
-            Manage the project gallery shown
-            on the homepage
-          </p>
+          <p>Manage the project gallery and categories shown on the homepage</p>
         </div>
 
-        <div
-          style={{
-            display: 'flex',
-            gap: 10,
-          }}
-        >
-          <a
-            href="/admin/projects/categories"
-            className="admin-btn btn"
-          >
-            <i className="bi bi-tags me-2" />
-            Categories
-          </a>
-
-          <button
-            className="admin-btn btn"
-            type="button"
-            onClick={openAddModal}
-          >
+        {tab === 'projects' && (
+          <button className="admin-btn btn" type="button" onClick={openAddModal}>
             <i className="bi bi-plus-lg me-2" />
             Add Project
           </button>
-        </div>
-      </div>
-
-      {/* =========================
-          ALERTS
-      ========================= */}
-
-      {error && (
-        <div className="alert alert-danger p-3 mb-3">
-          {error}
-        </div>
-      )}
-
-      {success && (
-        <div className="alert alert-success p-3 mb-3">
-          {success}
-        </div>
-      )}
-
-      {/* =========================
-          PROJECT LIST
-      ========================= */}
-
-      <div className="projects-admin-grid">
-        {projects.map((project) => (
-          <div
-            className="project-admin-card"
-            key={project.id}
-          >
-            {/* IMAGE */}
-
-            <div className="project-admin-image">
-              {project.image ? (
-                <img
-                  src={`${IMAGE_BASE}/${project.image}`}
-                  alt={project.title}
-                />
-              ) : (
-                <i className="bi bi-image" />
-              )}
-            </div>
-
-            {/* BODY */}
-
-            <div className="project-admin-body">
-
-              <span className="project-badge">
-                {project.category_name ||
-                  'Uncategorized'}
-              </span>
-
-              <h3>
-                {project.title}
-              </h3>
-
-              <p>
-                {project.description ||
-                  'No description'}
-              </p>
-
-              <div className="project-meta">
-                <span>
-                  <i className="bi bi-sort-numeric-down me-1" />
-                  Order{' '}
-                  {project.display_order ?? 0}
-                </span>
-              </div>
-
-              {/* ACTIONS */}
-
-              <div className="project-card-actions">
-
-                <button
-                  type="button"
-                  className="btn-icon"
-                  onClick={() =>
-                    openEditModal(project)
-                  }
-                  title="Edit"
-                >
-                  <i className="bi bi-pencil" />
-                </button>
-
-                <button
-                  type="button"
-                  className="btn-icon btn-danger"
-                  onClick={() =>
-                    setDeleteTarget(project)
-                  }
-                  title="Delete"
-                >
-                  <i className="bi bi-trash" />
-                </button>
-
-              </div>
-            </div>
-          </div>
-        ))}
-
-        {projects.length === 0 && (
-          <div className="empty-state">
-            No projects yet.
-          </div>
         )}
       </div>
 
-      {/* =========================
-          ADD / EDIT MODAL
-      ========================= */}
+      {/* =====================================================
+          TABS
+      ====================================================== */}
 
-      {modalOpen && (
-        <div
-          className="modal-backdrop-custom"
-          onClick={closeModal}
+      <div className="admin-nav" style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
+        <button
+          type="button"
+          className={`nav-button ${tab === 'projects' ? 'active' : ''}`}
+          style={{ flex: 'none' }}
+          onClick={() => switchTab('projects')}
         >
-          <div
-            className="confirm-modal"
-            style={{
-              width: 'min(560px, 100%)',
-            }}
-            onClick={(e) =>
-              e.stopPropagation()
-            }
-          >
-            <div className="card-heading">
-              <h3>
-                {editingId
-                  ? 'Edit Project'
-                  : 'Add Project'}
-              </h3>
-            </div>
+          <i className="bi bi-buildings-fill" />
+          <span>Projects</span>
+        </button>
+        <button
+          type="button"
+          className={`nav-button ${tab === 'categories' ? 'active' : ''}`}
+          style={{ flex: 'none' }}
+          onClick={() => switchTab('categories')}
+        >
+          <i className="bi bi-tags-fill" />
+          <span>Categories</span>
+        </button>
+      </div>
 
-            <form
-              onSubmit={handleModalSave}
-            >
-              <div className="row g-3">
+      {error && <div className="alert alert-danger p-3 mb-3">{error}</div>}
+      {success && <div className="alert alert-success p-3 mb-3">{success}</div>}
 
-                {/* TITLE */}
+      {/* =====================================================
+          PROJECTS TAB
+      ====================================================== */}
 
-                <div className="col-12">
-                  <label className="form-label">
-                    Title
-                  </label>
-
-                  <input
-                    className="form-input form-control"
-                    name="title"
-                    value={form.title}
-                    onChange={
-                      handleFormChange
-                    }
-                    required
-                  />
-                </div>
-
-                {/* CATEGORY */}
-
-                <div className="col-md-8">
-                  <label className="form-label">
-                    Category
-                  </label>
-
-                  <select
-                    className="form-input form-control form-select"
-                    name="category_id"
-                    value={
-                      form.category_id
-                    }
-                    onChange={
-                      handleFormChange
-                    }
-                    required
-                  >
-                    <option value="">
-                      Select category…
-                    </option>
-
-                    {categories.map(
-                      (category) => (
-                        <option
-                          key={category.id}
-                          value={category.id}
-                        >
-                          {category.name}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </div>
-
-                {/* ORDER */}
-
-                <div className="col-md-4">
-                  <label className="form-label">
-                    Order
-                  </label>
-
-                  <input
-                    className="form-input form-control"
-                    type="number"
-                    name="display_order"
-                    value={
-                      form.display_order
-                    }
-                    onChange={
-                      handleFormChange
-                    }
-                  />
-                </div>
-
-                {/* DESCRIPTION */}
-
-                <div className="col-12">
-                  <label className="form-label">
-                    Description
-                  </label>
-
-                  <textarea
-                    className="form-input form-control"
-                    name="description"
-                    value={
-                      form.description
-                    }
-                    onChange={
-                      handleFormChange
-                    }
-                    rows="4"
-                  />
-                </div>
-
-                {/* IMAGE */}
-
-                <div className="col-12">
-                  <label className="form-label">
-                    Image
-                  </label>
-
-                  <div>
-                    {imagePreview ? (
-                      <img
-                        className="project-form-preview mb-2"
-                        src={imagePreview}
-                        alt="Project preview"
-                      />
-                    ) : (
-                      <div className="image-placeholder compact mb-2">
-                        <i className="bi bi-image" />
-                      </div>
-                    )}
-
-                    <label
-                      className="admin-btn btn btn-sm mb-0"
-                      style={{
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <i className="bi bi-upload me-2" />
-                      Choose Image
-
-                      <input
-                        type="file"
-                        accept="image/*"
-                        hidden
-                        onChange={
-                          handleImagePick
-                        }
-                      />
-                    </label>
-                  </div>
-
-                  {!imageFile && (
-                    <small className="text-muted d-block mt-2">
-                      Image upload requires the
-                      upload method in adminApi.js.
-                    </small>
+      {tab === 'projects' && (
+        <>
+          <div className="projects-admin-grid">
+            {projects.map((project) => (
+              <div className="project-admin-card" key={project.id}>
+                <div className="project-admin-image">
+                  {project.image ? (
+                    <img src={getImageUrl(project.image)} alt={project.title} />
+                  ) : (
+                    <i className="bi bi-image" />
                   )}
                 </div>
+
+                <div className="project-admin-body">
+                  <span className="project-badge">
+                    {project.category_name || 'Uncategorized'}
+                  </span>
+
+                  <h3>{project.title}</h3>
+                  <p>{project.description || 'No description'}</p>
+
+                  <div className="project-meta">
+                    <span>
+                      <i className="bi bi-sort-numeric-down me-1" />
+                      Order {project.display_order ?? 0}
+                    </span>
+                  </div>
+
+                  <div className="project-card-actions">
+                    <button
+                      type="button"
+                      className="btn-icon"
+                      onClick={() => openEditModal(project)}
+                      title="Edit"
+                    >
+                      <i className="bi bi-pencil" />
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn-icon btn-danger"
+                      onClick={() => setDeleteProjectTarget(project)}
+                      title="Delete"
+                    >
+                      <i className="bi bi-trash" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {projects.length === 0 && (
+              <div className="empty-state">No projects yet.</div>
+            )}
+          </div>
+
+          {modalOpen && (
+            <div className="modal-backdrop-custom" onClick={closeModal}>
+              <div
+                className="confirm-modal"
+                style={{ width: 'min(560px, 100%)' }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="card-heading">
+                  <h3>{editingProjectId ? 'Edit Project' : 'Add Project'}</h3>
+                </div>
+
+                <form onSubmit={handleModalSave}>
+                  <div className="row g-3">
+
+                    <div className="col-12">
+                      <label className="form-label">Title</label>
+                      <input
+                        className="form-input form-control"
+                        name="title"
+                        value={projectForm.title}
+                        onChange={handleProjectFormChange}
+                        required
+                      />
+                    </div>
+
+                    <div className="col-md-8">
+                      <label className="form-label">Category</label>
+                      <select
+                        className="form-input form-control form-select"
+                        name="category_id"
+                        value={projectForm.category_id}
+                        onChange={handleProjectFormChange}
+                        required
+                      >
+                        <option value="">Select category…</option>
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="col-md-4">
+                      <label className="form-label">Order</label>
+                      <input
+                        className="form-input form-control"
+                        type="number"
+                        name="display_order"
+                        value={projectForm.display_order}
+                        onChange={handleProjectFormChange}
+                      />
+                    </div>
+
+                    <div className="col-12">
+                      <label className="form-label">Description</label>
+                      <textarea
+                        className="form-input form-control"
+                        name="description"
+                        value={projectForm.description}
+                        onChange={handleProjectFormChange}
+                        rows="4"
+                      />
+                    </div>
+
+                    <div className="col-12">
+                      <label className="form-label">Image</label>
+                      <div>
+                        {imagePreview ? (
+                          <img
+                            className="project-form-preview mb-2"
+                            src={imagePreview}
+                            alt="Project preview"
+                          />
+                        ) : (
+                          <div className="image-placeholder compact mb-2">
+                            <i className="bi bi-image" />
+                          </div>
+                        )}
+
+                        <label
+                          className="admin-btn btn btn-sm mb-0"
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <i className="bi bi-upload me-2" />
+                          {imageFile ? 'Change Image' : 'Choose Image'}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            hidden
+                            onChange={handleImagePick}
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  <div className="form-actions-modern">
+                    <button className="admin-btn btn" type="submit" disabled={modalSaving}>
+                      {modalSaving ? 'Saving…' : editingProjectId ? 'Save Changes' : 'Create Project'}
+                    </button>
+
+                    <button
+                      className="btn-icon"
+                      type="button"
+                      onClick={closeModal}
+                      disabled={modalSaving}
+                      style={{ width: 'auto', padding: '0 16px' }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {deleteProjectTarget && (
+            <div className="modal-backdrop-custom" onClick={() => setDeleteProjectTarget(null)}>
+              <div className="confirm-modal" onClick={(e) => e.stopPropagation()}>
+                <div className="confirm-icon">
+                  <i className="bi bi-exclamation-triangle" />
+                </div>
+
+                <h3>Delete "{deleteProjectTarget.title}"?</h3>
+                <p>This will permanently remove the project and its image. This can't be undone.</p>
+
+                <div className="form-actions-modern">
+                  <button
+                    className="admin-btn btn"
+                    style={{ background: 'var(--danger)' }}
+                    onClick={confirmDeleteProject}
+                    disabled={deletingProject}
+                  >
+                    {deletingProject ? 'Deleting…' : 'Delete Project'}
+                  </button>
+
+                  <button
+                    className="btn-icon"
+                    onClick={() => setDeleteProjectTarget(null)}
+                    disabled={deletingProject}
+                    style={{ width: 'auto', padding: '0 16px' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* =====================================================
+          CATEGORIES TAB
+      ====================================================== */}
+
+      {tab === 'categories' && (
+        <div className="split-manager">
+
+          <form className="content-card form-card" onSubmit={handleCategorySubmit}>
+            <div className="card-heading">
+              <h3>{editingCategoryId ? 'Edit Category' : 'Add Category'}</h3>
+            </div>
+
+            <div className="row g-3">
+              <div className="col-12">
+                <label className="form-label">Name</label>
+                <input
+                  className="form-input form-control"
+                  name="name"
+                  value={categoryForm.name}
+                  onChange={handleCategoryFormChange}
+                  required
+                />
               </div>
 
-              {/* ACTIONS */}
+              <div className="col-12">
+                <label className="form-label">Slug</label>
+                <input
+                  className="form-input form-control"
+                  name="slug"
+                  value={categoryForm.slug}
+                  onChange={handleCategoryFormChange}
+                  placeholder="auto-generated from name if left blank"
+                />
+              </div>
 
-              <div className="form-actions-modern">
+              <div className="col-12">
+                <label className="form-label">Display Order</label>
+                <input
+                  className="form-input form-control"
+                  type="number"
+                  name="display_order"
+                  value={categoryForm.display_order}
+                  onChange={handleCategoryFormChange}
+                />
+              </div>
+            </div>
 
+            <div className="form-actions-modern">
+              <button className="admin-btn btn" type="submit" disabled={categorySaving}>
+                {categorySaving ? 'Saving…' : editingCategoryId ? 'Save Changes' : 'Add Category'}
+              </button>
+
+              {editingCategoryId && (
                 <button
-                  className="admin-btn btn"
-                  type="submit"
-                  disabled={modalSaving}
-                >
-                  {modalSaving
-                    ? 'Saving…'
-                    : editingId
-                    ? 'Save Changes'
-                    : 'Create Project'}
-                </button>
-
-                <button
-                  className="btn-icon"
                   type="button"
-                  onClick={closeModal}
-                  disabled={modalSaving}
-                  style={{
-                    width: 'auto',
-                    padding: '0 16px',
-                  }}
+                  className="btn-icon"
+                  style={{ width: 'auto', padding: '0 16px' }}
+                  onClick={resetCategoryForm}
+                  disabled={categorySaving}
                 >
                   Cancel
                 </button>
+              )}
+            </div>
+          </form>
 
+          <div className="content-card list-card">
+            <div className="card-heading">
+              <h3>All Categories</h3>
+            </div>
+
+            <div className="stack-list">
+              {categories.map((category, index) => (
+                <div className="data-item" key={category.id}>
+                  <div className="category-number">{index + 1}</div>
+
+                  <div className="data-info">
+                    <strong>{category.name}</strong>
+                    <span>
+                      /{category.slug} · order {category.display_order ?? 0}
+                    </span>
+                  </div>
+
+                  <div className="data-actions">
+                    <button
+                      type="button"
+                      className="btn-icon"
+                      onClick={() => startEditCategory(category)}
+                      title="Edit"
+                    >
+                      <i className="bi bi-pencil" />
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn-icon btn-danger"
+                      onClick={() => setDeleteCategoryTarget(category)}
+                      title="Delete"
+                    >
+                      <i className="bi bi-trash" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {categories.length === 0 && (
+                <div className="empty-state">No categories yet.</div>
+              )}
+            </div>
+          </div>
+
+          {deleteCategoryTarget && (
+            <div className="modal-backdrop-custom" onClick={() => setDeleteCategoryTarget(null)}>
+              <div className="confirm-modal" onClick={(e) => e.stopPropagation()}>
+                <div className="confirm-icon">
+                  <i className="bi bi-exclamation-triangle" />
+                </div>
+
+                <h3>Delete "{deleteCategoryTarget.name}"?</h3>
+                <p>Categories that still have projects assigned to them can't be deleted.</p>
+
+                <div className="form-actions-modern">
+                  <button
+                    className="admin-btn btn"
+                    style={{ background: 'var(--danger)' }}
+                    onClick={confirmDeleteCategory}
+                    disabled={deletingCategory}
+                  >
+                    {deletingCategory ? 'Deleting…' : 'Delete Category'}
+                  </button>
+
+                  <button
+                    className="btn-icon"
+                    onClick={() => setDeleteCategoryTarget(null)}
+                    disabled={deletingCategory}
+                    style={{ width: 'auto', padding: '0 16px' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* =========================
-          DELETE MODAL
-      ========================= */}
-
-      {deleteTarget && (
-        <div
-          className="modal-backdrop-custom"
-          onClick={() =>
-            setDeleteTarget(null)
-          }
-        >
-          <div
-            className="confirm-modal"
-            onClick={(e) =>
-              e.stopPropagation()
-            }
-          >
-            <div className="confirm-icon">
-              <i className="bi bi-exclamation-triangle" />
             </div>
-
-            <h3>
-              Delete "{deleteTarget.title}"?
-            </h3>
-
-            <p>
-              This will permanently remove
-              the project. This can't be
-              undone.
-            </p>
-
-            <div className="form-actions-modern">
-
-              <button
-                className="admin-btn btn"
-                style={{
-                  background:
-                    'var(--danger)',
-                }}
-                onClick={confirmDelete}
-                disabled={deleting}
-              >
-                {deleting
-                  ? 'Deleting…'
-                  : 'Delete Project'}
-              </button>
-
-              <button
-                className="btn-icon"
-                onClick={() =>
-                  setDeleteTarget(null)
-                }
-                disabled={deleting}
-                style={{
-                  width: 'auto',
-                  padding: '0 16px',
-                }}
-              >
-                Cancel
-              </button>
-
-            </div>
-          </div>
+          )}
         </div>
       )}
     </>

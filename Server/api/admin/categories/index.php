@@ -1,20 +1,120 @@
 <?php
 
+/**
+ * /Server/api/admin/categories/index.php
+ *
+ * PROJECT CATEGORIES API — full CRUD.
+ *
+ * GET                -> all categories, ordered
+ * GET    ?id=1        -> one category
+ * POST                -> create { name, slug?, display_order? }
+ * PUT/PATCH ?id=1      -> update (JSON or multipart + _method=PUT)
+ * DELETE ?id=1         -> delete (blocked if projects still reference it)
+ *
+ * No image field — project_categories has none.
+ */
+
 require_once __DIR__ . '/../_bootstrap.php';
 
 header("Content-Type: application/json; charset=utf-8");
 
+
+/* =========================================================
+   FATAL-ERROR SAFETY NET
+   Same pattern used across hero/about/services/projects.
+========================================================= */
+
+register_shutdown_function(function () {
+
+    $error = error_get_last();
+
+    if (
+        $error &&
+        in_array(
+            $error['type'],
+            [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR],
+            true
+        )
+    ) {
+
+        if (!headers_sent()) {
+            http_response_code(500);
+            header('Content-Type: application/json; charset=utf-8');
+        }
+
+        echo json_encode([
+            'success' => false,
+            'error' =>
+                'Server error: ' . $error['message'] .
+                ' in ' . $error['file'] .
+                ' on line ' . $error['line'],
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    }
+});
+
+
 $method = $_SERVER['REQUEST_METHOD'];
 
+if ($method === 'POST' && isset($_POST['_method'])) {
 
-/*
-|--------------------------------------------------------------------------
-| Helper: Get JSON request data
-|--------------------------------------------------------------------------
-*/
+    $overrideMethod = strtoupper(trim((string)$_POST['_method']));
+
+    if ($overrideMethod === 'PUT' || $overrideMethod === 'PATCH') {
+        $method = $overrideMethod;
+    }
+}
+
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function send_json(array $data, int $status = 200): void
+{
+    http_response_code($status);
+
+    $json = json_encode(
+        $data,
+        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+    );
+
+    if ($json === false) {
+
+        array_walk_recursive($data, function (&$value) {
+            if (is_string($value)) {
+                $value = mb_convert_encoding($value, 'UTF-8', 'UTF-8');
+            }
+        });
+
+        $json = json_encode(
+            $data,
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+        );
+    }
+
+    if ($json === false) {
+
+        $json = json_encode([
+            'success' => false,
+            'error' =>
+                'A server error occurred and the response could not be encoded. Check the PHP error log.',
+        ]);
+    }
+
+    echo $json;
+    exit;
+}
+
 
 function get_request_data(): array
 {
+    if (
+        isset($_SERVER['CONTENT_TYPE']) &&
+        stripos($_SERVER['CONTENT_TYPE'], 'multipart/form-data') !== false
+    ) {
+        return $_POST;
+    }
+
     $raw = file_get_contents("php://input");
 
     if (!$raw) {
@@ -27,829 +127,312 @@ function get_request_data(): array
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| GET
-|--------------------------------------------------------------------------
-|
-| GET /categories/
-| GET /categories/?id=1
-|
-*/
+function slugify(string $text): string
+{
+    $text = strtolower(trim($text));
+    $text = preg_replace('/[^a-z0-9]+/', '-', $text);
+    return trim($text, '-');
+}
 
-if ($method === 'GET') {
 
-    /*
-     * Get one category
-     */
-    if (isset($_GET['id'])) {
+function fetch_category(mysqli $conn, int $id): ?array
+{
+    $stmt = $conn->prepare("
+        SELECT * FROM project_categories WHERE id = ? LIMIT 1
+    ");
 
-        $id = (int)$_GET['id'];
+    if (!$stmt) {
+        throw new Exception($conn->error);
+    }
 
-        if ($id <= 0) {
+    $stmt->bind_param("i", $id);
 
-            http_response_code(400);
+    if (!$stmt->execute()) {
+        $stmt->close();
+        throw new Exception('Unable to load category.');
+    }
 
-            echo json_encode([
-                "success" => false,
-                "error" => "Invalid category ID."
-            ]);
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
 
-            exit;
+    return $row ?: null;
+}
+
+
+/* =========================================================
+   EVERYTHING BELOW RUNS INSIDE ONE OUTER SAFETY NET.
+========================================================= */
+
+try {
+
+    /* =====================================================
+       GET
+    ===================================================== */
+
+    if ($method === 'GET') {
+
+        if (isset($_GET['id'])) {
+
+            $id = (int)$_GET['id'];
+
+            if ($id <= 0) {
+                send_json(["success" => false, "error" => "Invalid category ID."], 400);
+            }
+
+            $category = fetch_category($conn, $id);
+
+            if (!$category) {
+                send_json(["success" => false, "error" => "Category not found."], 404);
+            }
+
+            send_json(["success" => true, "data" => $category]);
         }
 
-
-        $stmt = $conn->prepare("
-            SELECT
-                id,
-                name,
-                slug,
-                display_order
-            FROM project_categories
-            WHERE id = ?
-            LIMIT 1
+        $result = $conn->query("
+            SELECT * FROM project_categories
+            ORDER BY display_order ASC, id ASC
         ");
 
+        if (!$result) {
+            throw new Exception($conn->error);
+        }
+
+        $categories = [];
+
+        while ($row = $result->fetch_assoc()) {
+            $categories[] = $row;
+        }
+
+        send_json(["success" => true, "data" => $categories]);
+    }
+
+
+    /* =====================================================
+       POST — CREATE
+    ===================================================== */
+
+    if ($method === 'POST') {
+
+        require_admin();
+
+        $input = get_request_data();
+
+        $name = trim((string)($input['name'] ?? ''));
+
+        if ($name === '') {
+            send_json(["success" => false, "error" => "Category name is required."], 422);
+        }
+
+        $rawSlug = trim((string)($input['slug'] ?? ''));
+        $slug = $rawSlug !== '' ? slugify($rawSlug) : slugify($name);
+
+        if ($slug === '') {
+            send_json(["success" => false, "error" => "Could not generate a valid slug from the name."], 422);
+        }
+
+        $displayOrder = (int)($input['display_order'] ?? 0);
+
+        $checkStmt = $conn->prepare("SELECT id FROM project_categories WHERE slug = ?");
+
+        if (!$checkStmt) {
+            throw new Exception($conn->error);
+        }
+
+        $checkStmt->bind_param("s", $slug);
+        $checkStmt->execute();
+
+        $slugTaken = $checkStmt->get_result()->fetch_assoc();
+        $checkStmt->close();
+
+        if ($slugTaken) {
+            send_json(["success" => false, "error" => "A category with this slug already exists."], 409);
+        }
+
+        $stmt = $conn->prepare("
+            INSERT INTO project_categories (name, slug, display_order)
+            VALUES (?, ?, ?)
+        ");
 
         if (!$stmt) {
-
-            http_response_code(500);
-
-            echo json_encode([
-                "success" => false,
-                "error" => $conn->error
-            ]);
-
-            exit;
+            throw new Exception($conn->error);
         }
 
+        $stmt->bind_param("ssi", $name, $slug, $displayOrder);
 
-        $stmt->bind_param(
-            "i",
-            $id
-        );
+        if (!$stmt->execute()) {
+            $err = $stmt->error;
+            $stmt->close();
+            throw new Exception($err);
+        }
 
-        $stmt->execute();
-
-
-        $result =
-            $stmt->get_result();
-
-        $category =
-            $result->fetch_assoc();
-
-
+        $newId = $stmt->insert_id;
         $stmt->close();
 
+        $created = fetch_category($conn, $newId);
 
-        if (!$category) {
-
-            http_response_code(404);
-
-            echo json_encode([
-                "success" => false,
-                "error" => "Category not found."
-            ]);
-
-            exit;
-        }
-
-
-        echo json_encode([
+        send_json([
             "success" => true,
-            "data" => $category
-        ]);
-
-        exit;
+            "message" => "Category created successfully.",
+            "data" => $created,
+        ], 201);
     }
 
 
-    /*
-     * Get all categories
-     */
-    $result = $conn->query("
-        SELECT
-            id,
-            name,
-            slug,
-            display_order
-        FROM project_categories
-        ORDER BY
-            display_order ASC,
-            id ASC
-    ");
+    /* =====================================================
+       PUT / PATCH — UPDATE
+    ===================================================== */
 
+    if ($method === 'PUT' || $method === 'PATCH') {
 
-    if (!$result) {
+        require_admin();
 
-        http_response_code(500);
+        $input = get_request_data();
 
-        echo json_encode([
-            "success" => false,
-            "error" => $conn->error
-        ]);
+        $id = isset($_GET['id']) ? (int)$_GET['id'] : (int)($input['id'] ?? 0);
 
-        exit;
-    }
+        if ($id <= 0) {
+            send_json(["success" => false, "error" => "Category ID is required."], 400);
+        }
 
+        $existing = fetch_category($conn, $id);
 
-    $categories = [];
+        if (!$existing) {
+            send_json(["success" => false, "error" => "Category not found."], 404);
+        }
 
+        $name =
+            array_key_exists('name', $input) && trim((string)$input['name']) !== ''
+                ? trim((string)$input['name'])
+                : $existing['name'];
 
-    while ($row = $result->fetch_assoc()) {
+        $slug = $existing['slug'];
 
-        $categories[] = $row;
-    }
+        if (array_key_exists('slug', $input) && trim((string)$input['slug']) !== '') {
 
+            $slug = slugify((string)$input['slug']);
 
-    echo json_encode([
-        "success" => true,
-        "data" => $categories
-    ]);
+            $checkStmt = $conn->prepare("
+                SELECT id FROM project_categories WHERE slug = ? AND id != ?
+            ");
 
-    exit;
-}
+            if (!$checkStmt) {
+                throw new Exception($conn->error);
+            }
 
+            $checkStmt->bind_param("si", $slug, $id);
+            $checkStmt->execute();
 
-/*
-|--------------------------------------------------------------------------
-| POST - CREATE CATEGORY
-|--------------------------------------------------------------------------
-*/
+            $slugTaken = $checkStmt->get_result()->fetch_assoc();
+            $checkStmt->close();
 
-if ($method === 'POST') {
+            if ($slugTaken) {
+                send_json(["success" => false, "error" => "A category with this slug already exists."], 409);
+            }
+        }
 
-    require_auth();
+        $displayOrder =
+            array_key_exists('display_order', $input)
+                ? (int)$input['display_order']
+                : (int)$existing['display_order'];
 
+        $stmt = $conn->prepare("
+            UPDATE project_categories
+            SET name = ?, slug = ?, display_order = ?
+            WHERE id = ?
+        ");
 
-    $input =
-        get_request_data();
+        if (!$stmt) {
+            throw new Exception($conn->error);
+        }
 
+        $stmt->bind_param("ssii", $name, $slug, $displayOrder, $id);
 
-    $name =
-        trim($input['name'] ?? '');
-
-    $slug =
-        trim($input['slug'] ?? '');
-
-    $display_order =
-        (int)($input['display_order'] ?? 0);
-
-
-    /*
-     * Validate name
-     */
-    if ($name === '') {
-
-        http_response_code(422);
-
-        echo json_encode([
-            "success" => false,
-            "error" => "Category name is required."
-        ]);
-
-        exit;
-    }
-
-
-    /*
-     * Validate slug
-     */
-    if ($slug === '') {
-
-        http_response_code(422);
-
-        echo json_encode([
-            "success" => false,
-            "error" => "Category slug is required."
-        ]);
-
-        exit;
-    }
-
-
-    /*
-     * Validate slug format
-     *
-     * Example:
-     * residential
-     * commercial
-     * infrastructure
-     */
-    if (!preg_match(
-        '/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
-        $slug
-    )) {
-
-        http_response_code(422);
-
-        echo json_encode([
-            "success" => false,
-            "error" => "Slug must contain only lowercase letters, numbers, and hyphens."
-        ]);
-
-        exit;
-    }
-
-
-    /*
-     * Check duplicate slug
-     */
-    $check = $conn->prepare("
-        SELECT id
-        FROM project_categories
-        WHERE slug = ?
-        LIMIT 1
-    ");
-
-
-    if (!$check) {
-
-        http_response_code(500);
-
-        echo json_encode([
-            "success" => false,
-            "error" => $conn->error
-        ]);
-
-        exit;
-    }
-
-
-    $check->bind_param(
-        "s",
-        $slug
-    );
-
-    $check->execute();
-
-
-    $existing =
-        $check->get_result()->fetch_assoc();
-
-
-    $check->close();
-
-
-    if ($existing) {
-
-        http_response_code(409);
-
-        echo json_encode([
-            "success" => false,
-            "error" => "A category with this slug already exists."
-        ]);
-
-        exit;
-    }
-
-
-    /*
-     * Create category
-     */
-    $stmt = $conn->prepare("
-        INSERT INTO project_categories
-        (
-            name,
-            slug,
-            display_order
-        )
-        VALUES (?, ?, ?)
-    ");
-
-
-    if (!$stmt) {
-
-        http_response_code(500);
-
-        echo json_encode([
-            "success" => false,
-            "error" => $conn->error
-        ]);
-
-        exit;
-    }
-
-
-    $stmt->bind_param(
-        "ssi",
-        $name,
-        $slug,
-        $display_order
-    );
-
-
-    if (!$stmt->execute()) {
-
-        http_response_code(500);
-
-        echo json_encode([
-            "success" => false,
-            "error" => $stmt->error
-        ]);
+        if (!$stmt->execute()) {
+            $err = $stmt->error;
+            $stmt->close();
+            throw new Exception($err);
+        }
 
         $stmt->close();
 
-        exit;
+        $updated = fetch_category($conn, $id);
+
+        send_json([
+            "success" => true,
+            "message" => "Category updated successfully.",
+            "data" => $updated,
+        ]);
     }
 
 
-    $newId =
-        $stmt->insert_id;
+    /* =====================================================
+       DELETE
+       Blocked if any project still references this category.
+    ===================================================== */
 
+    if ($method === 'DELETE') {
 
-    $stmt->close();
+        require_admin();
 
+        $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
-    echo json_encode([
-        "success" => true,
-        "message" => "Category created successfully.",
-        "id" => $newId
-    ]);
+        if ($id <= 0) {
+            send_json(["success" => false, "error" => "Category ID is required."], 400);
+        }
 
-    exit;
-}
+        $existing = fetch_category($conn, $id);
 
+        if (!$existing) {
+            send_json(["success" => false, "error" => "Category not found."], 404);
+        }
 
-/*
-|--------------------------------------------------------------------------
-| PUT / PATCH - UPDATE CATEGORY
-|--------------------------------------------------------------------------
-|
-| PUT /categories/?id=1
-|
-*/
+        $inUseStmt = $conn->prepare("
+            SELECT COUNT(*) AS cnt FROM projects WHERE category_id = ?
+        ");
 
-if (
-    $method === 'PUT' ||
-    $method === 'PATCH'
-) {
+        if (!$inUseStmt) {
+            throw new Exception($conn->error);
+        }
 
-    require_auth();
+        $inUseStmt->bind_param("i", $id);
+        $inUseStmt->execute();
 
+        $inUseRow = $inUseStmt->get_result()->fetch_assoc();
+        $inUseStmt->close();
 
-    $id = isset($_GET['id'])
-        ? (int)$_GET['id']
-        : 0;
+        if ((int)($inUseRow['cnt'] ?? 0) > 0) {
+            send_json([
+                "success" => false,
+                "error" => "Cannot delete a category that still has projects assigned to it."
+            ], 409);
+        }
 
+        $stmt = $conn->prepare("DELETE FROM project_categories WHERE id = ?");
 
-    if ($id <= 0) {
+        if (!$stmt) {
+            throw new Exception($conn->error);
+        }
 
-        http_response_code(400);
+        $stmt->bind_param("i", $id);
 
-        echo json_encode([
-            "success" => false,
-            "error" => "Category ID is required."
-        ]);
-
-        exit;
-    }
-
-
-    $input =
-        get_request_data();
-
-
-    $name =
-        trim($input['name'] ?? '');
-
-    $slug =
-        trim($input['slug'] ?? '');
-
-    $display_order =
-        (int)($input['display_order'] ?? 0);
-
-
-    /*
-     * Validate name
-     */
-    if ($name === '') {
-
-        http_response_code(422);
-
-        echo json_encode([
-            "success" => false,
-            "error" => "Category name is required."
-        ]);
-
-        exit;
-    }
-
-
-    /*
-     * Validate slug
-     */
-    if ($slug === '') {
-
-        http_response_code(422);
-
-        echo json_encode([
-            "success" => false,
-            "error" => "Category slug is required."
-        ]);
-
-        exit;
-    }
-
-
-    /*
-     * Validate slug format
-     */
-    if (!preg_match(
-        '/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
-        $slug
-    )) {
-
-        http_response_code(422);
-
-        echo json_encode([
-            "success" => false,
-            "error" => "Slug must contain only lowercase letters, numbers, and hyphens."
-        ]);
-
-        exit;
-    }
-
-
-    /*
-     * Check category exists
-     */
-    $categoryCheck = $conn->prepare("
-        SELECT id
-        FROM project_categories
-        WHERE id = ?
-        LIMIT 1
-    ");
-
-
-    if (!$categoryCheck) {
-
-        http_response_code(500);
-
-        echo json_encode([
-            "success" => false,
-            "error" => $conn->error
-        ]);
-
-        exit;
-    }
-
-
-    $categoryCheck->bind_param(
-        "i",
-        $id
-    );
-
-    $categoryCheck->execute();
-
-
-    $categoryExists =
-        $categoryCheck
-            ->get_result()
-            ->fetch_assoc();
-
-
-    $categoryCheck->close();
-
-
-    if (!$categoryExists) {
-
-        http_response_code(404);
-
-        echo json_encode([
-            "success" => false,
-            "error" => "Category not found."
-        ]);
-
-        exit;
-    }
-
-
-    /*
-     * Check duplicate slug
-     */
-    $check = $conn->prepare("
-        SELECT id
-        FROM project_categories
-        WHERE slug = ?
-        AND id != ?
-        LIMIT 1
-    ");
-
-
-    if (!$check) {
-
-        http_response_code(500);
-
-        echo json_encode([
-            "success" => false,
-            "error" => $conn->error
-        ]);
-
-        exit;
-    }
-
-
-    $check->bind_param(
-        "si",
-        $slug,
-        $id
-    );
-
-    $check->execute();
-
-
-    $existing =
-        $check->get_result()->fetch_assoc();
-
-
-    $check->close();
-
-
-    if ($existing) {
-
-        http_response_code(409);
-
-        echo json_encode([
-            "success" => false,
-            "error" => "A different category already uses this slug."
-        ]);
-
-        exit;
-    }
-
-
-    /*
-     * Update category
-     */
-    $stmt = $conn->prepare("
-        UPDATE project_categories
-        SET
-            name = ?,
-            slug = ?,
-            display_order = ?
-        WHERE id = ?
-    ");
-
-
-    if (!$stmt) {
-
-        http_response_code(500);
-
-        echo json_encode([
-            "success" => false,
-            "error" => $conn->error
-        ]);
-
-        exit;
-    }
-
-
-    $stmt->bind_param(
-        "ssii",
-        $name,
-        $slug,
-        $display_order,
-        $id
-    );
-
-
-    if (!$stmt->execute()) {
-
-        http_response_code(500);
-
-        echo json_encode([
-            "success" => false,
-            "error" => $stmt->error
-        ]);
+        if (!$stmt->execute()) {
+            $err = $stmt->error;
+            $stmt->close();
+            throw new Exception($err);
+        }
 
         $stmt->close();
 
-        exit;
+        send_json(["success" => true, "message" => "Category deleted successfully."]);
     }
 
 
-    $stmt->close();
+    send_json(["success" => false, "error" => "Method not allowed."], 405);
 
 
-    echo json_encode([
-        "success" => true,
-        "message" => "Category updated successfully."
-    ]);
+} catch (Throwable $e) {
 
-    exit;
+    error_log('Categories endpoint — uncaught error: ' . $e->getMessage());
+
+    send_json(["success" => false, "error" => $e->getMessage()], 500);
 }
-
-
-/*
-|--------------------------------------------------------------------------
-| DELETE CATEGORY
-|--------------------------------------------------------------------------
-|
-| DELETE /categories/?id=1
-|
-| IMPORTANT:
-| Do not delete a category if projects are using it.
-|
-*/
-
-if ($method === 'DELETE') {
-
-    require_auth();
-
-
-    $id = isset($_GET['id'])
-        ? (int)$_GET['id']
-        : 0;
-
-
-    if ($id <= 0) {
-
-        http_response_code(400);
-
-        echo json_encode([
-            "success" => false,
-            "error" => "Category ID is required."
-        ]);
-
-        exit;
-    }
-
-
-    /*
-     * Check category exists
-     */
-    $check = $conn->prepare("
-        SELECT id
-        FROM project_categories
-        WHERE id = ?
-        LIMIT 1
-    ");
-
-
-    if (!$check) {
-
-        http_response_code(500);
-
-        echo json_encode([
-            "success" => false,
-            "error" => $conn->error
-        ]);
-
-        exit;
-    }
-
-
-    $check->bind_param(
-        "i",
-        $id
-    );
-
-    $check->execute();
-
-
-    $exists =
-        $check
-            ->get_result()
-            ->fetch_assoc();
-
-
-    $check->close();
-
-
-    if (!$exists) {
-
-        http_response_code(404);
-
-        echo json_encode([
-            "success" => false,
-            "error" => "Category not found."
-        ]);
-
-        exit;
-    }
-
-
-    /*
-     * Check whether projects use this category.
-     */
-    $projectCheck = $conn->prepare("
-        SELECT COUNT(*) AS total
-        FROM projects
-        WHERE category_id = ?
-    ");
-
-
-    if (!$projectCheck) {
-
-        http_response_code(500);
-
-        echo json_encode([
-            "success" => false,
-            "error" => $conn->error
-        ]);
-
-        exit;
-    }
-
-
-    $projectCheck->bind_param(
-        "i",
-        $id
-    );
-
-    $projectCheck->execute();
-
-
-    $projectCount =
-        $projectCheck
-            ->get_result()
-            ->fetch_assoc();
-
-
-    $projectCheck->close();
-
-
-    if ((int)$projectCount['total'] > 0) {
-
-        http_response_code(409);
-
-        echo json_encode([
-            "success" => false,
-            "error" =>
-                "This category cannot be deleted because it is assigned to " .
-                $projectCount['total'] .
-                " project(s). Please reassign or delete those projects first."
-        ]);
-
-        exit;
-    }
-
-
-    /*
-     * Delete category
-     */
-    $stmt = $conn->prepare("
-        DELETE FROM project_categories
-        WHERE id = ?
-    ");
-
-
-    if (!$stmt) {
-
-        http_response_code(500);
-
-        echo json_encode([
-            "success" => false,
-            "error" => $conn->error
-        ]);
-
-        exit;
-    }
-
-
-    $stmt->bind_param(
-        "i",
-        $id
-    );
-
-
-    if (!$stmt->execute()) {
-
-        http_response_code(500);
-
-        echo json_encode([
-            "success" => false,
-            "error" => $stmt->error
-        ]);
-
-        $stmt->close();
-
-        exit;
-    }
-
-
-    $stmt->close();
-
-
-    echo json_encode([
-        "success" => true,
-        "message" => "Category deleted successfully."
-    ]);
-
-    exit;
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| METHOD NOT ALLOWED
-|--------------------------------------------------------------------------
-*/
-
-http_response_code(405);
-
-echo json_encode([
-    "success" => false,
-    "error" => "Method not allowed."
-]);

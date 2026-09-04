@@ -187,7 +187,7 @@ Administrators can:
 - Update About content and features.
 - Update Services section content and service items.
 - Update Services counters.
-- Create, update, and delete project categories.
+- Create and update project categories.
 - Create, update, and delete projects.
 - Update site settings.
 - Upload and replace website images.

@@ -291,7 +291,7 @@ export default function Dashboard() {
 
                 <Link
                   className="quick-action"
-                  to="/admin/projects/categories"
+                  to="/admin/projects"
                 >
                   <i className="bi bi-tags" />
 

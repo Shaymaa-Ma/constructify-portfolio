@@ -3,13 +3,18 @@
 /**
  * /Server/api/admin/categories/index.php
  *
- * PROJECT CATEGORIES API — full CRUD.
+ * PROJECT CATEGORIES API
  *
  * GET                -> all categories, ordered
  * GET    ?id=1        -> one category
- * POST                -> create { name, slug?, display_order? }
+ * POST                -> create { name, slug?, display_order?, is_available? }
  * PUT/PATCH ?id=1      -> update (JSON or multipart + _method=PUT)
- * DELETE ?id=1         -> delete (blocked if projects still reference it)
+ *                         accepts partial payloads, incl. { is_available: 0|1 }
+ *                         for the Available / Unavailable toggle.
+ *
+ * DELETE is intentionally NOT supported. Categories are hidden from the
+ * client site by setting is_available = 0 instead of being removed, so
+ * they stay intact in the DB and in the admin list.
  *
  * No image field — project_categories has none.
  */
@@ -167,6 +172,10 @@ try {
 
     /* =====================================================
        GET
+       Returns ALL categories (available + unavailable) so the
+       admin panel can list and toggle both states. The client
+       site's own endpoint is responsible for filtering
+       is_available = 1.
     ===================================================== */
 
     if ($method === 'GET') {
@@ -232,6 +241,10 @@ try {
 
         $displayOrder = (int)($input['display_order'] ?? 0);
 
+        $isAvailable = array_key_exists('is_available', $input)
+            ? (int)(bool)$input['is_available']
+            : 1;
+
         $checkStmt = $conn->prepare("SELECT id FROM project_categories WHERE slug = ?");
 
         if (!$checkStmt) {
@@ -249,15 +262,15 @@ try {
         }
 
         $stmt = $conn->prepare("
-            INSERT INTO project_categories (name, slug, display_order)
-            VALUES (?, ?, ?)
+            INSERT INTO project_categories (name, slug, display_order, is_available)
+            VALUES (?, ?, ?, ?)
         ");
 
         if (!$stmt) {
             throw new Exception($conn->error);
         }
 
-        $stmt->bind_param("ssi", $name, $slug, $displayOrder);
+        $stmt->bind_param("ssii", $name, $slug, $displayOrder, $isAvailable);
 
         if (!$stmt->execute()) {
             $err = $stmt->error;
@@ -280,6 +293,10 @@ try {
 
     /* =====================================================
        PUT / PATCH — UPDATE
+       Accepts partial payloads. This is also how the
+       Available / Unavailable toggle works: the frontend can
+       send just { is_available: 0 | 1 } and every other field
+       falls back to its current value.
     ===================================================== */
 
     if ($method === 'PUT' || $method === 'PATCH') {
@@ -335,9 +352,14 @@ try {
                 ? (int)$input['display_order']
                 : (int)$existing['display_order'];
 
+        $isAvailable =
+            array_key_exists('is_available', $input)
+                ? (int)(bool)$input['is_available']
+                : (int)$existing['is_available'];
+
         $stmt = $conn->prepare("
             UPDATE project_categories
-            SET name = ?, slug = ?, display_order = ?
+            SET name = ?, slug = ?, display_order = ?, is_available = ?
             WHERE id = ?
         ");
 
@@ -345,7 +367,7 @@ try {
             throw new Exception($conn->error);
         }
 
-        $stmt->bind_param("ssii", $name, $slug, $displayOrder, $id);
+        $stmt->bind_param("ssiii", $name, $slug, $displayOrder, $isAvailable, $id);
 
         if (!$stmt->execute()) {
             $err = $stmt->error;
@@ -362,68 +384,6 @@ try {
             "message" => "Category updated successfully.",
             "data" => $updated,
         ]);
-    }
-
-
-    /* =====================================================
-       DELETE
-       Blocked if any project still references this category.
-    ===================================================== */
-
-    if ($method === 'DELETE') {
-
-        require_admin();
-
-        $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-
-        if ($id <= 0) {
-            send_json(["success" => false, "error" => "Category ID is required."], 400);
-        }
-
-        $existing = fetch_category($conn, $id);
-
-        if (!$existing) {
-            send_json(["success" => false, "error" => "Category not found."], 404);
-        }
-
-        $inUseStmt = $conn->prepare("
-            SELECT COUNT(*) AS cnt FROM projects WHERE category_id = ?
-        ");
-
-        if (!$inUseStmt) {
-            throw new Exception($conn->error);
-        }
-
-        $inUseStmt->bind_param("i", $id);
-        $inUseStmt->execute();
-
-        $inUseRow = $inUseStmt->get_result()->fetch_assoc();
-        $inUseStmt->close();
-
-        if ((int)($inUseRow['cnt'] ?? 0) > 0) {
-            send_json([
-                "success" => false,
-                "error" => "Cannot delete a category that still has projects assigned to it."
-            ], 409);
-        }
-
-        $stmt = $conn->prepare("DELETE FROM project_categories WHERE id = ?");
-
-        if (!$stmt) {
-            throw new Exception($conn->error);
-        }
-
-        $stmt->bind_param("i", $id);
-
-        if (!$stmt->execute()) {
-            $err = $stmt->error;
-            $stmt->close();
-            throw new Exception($err);
-        }
-
-        $stmt->close();
-
-        send_json(["success" => true, "message" => "Category deleted successfully."]);
     }
 
 

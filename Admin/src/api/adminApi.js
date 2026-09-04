@@ -2067,10 +2067,10 @@ export const servicesApi = {
 };
 
 
-
 /* =========================================================
    CATEGORIES API
-   FULL CRUD — no image field (project_categories has none)
+   No image field (project_categories has none).
+   No delete — categories are hidden via is_available instead.
 ========================================================= */
 
 export const categoriesApi = {
@@ -2134,16 +2134,19 @@ export const categoriesApi = {
 
 
   /*
-   * DELETE
-   * Rejects with a 409 message if projects still reference
-   * this category — surfaced as a normal thrown Error by
-   * parseResponse().
+   * SET AVAILABILITY
+   * Available / Unavailable toggle. Sends only is_available —
+   * the backend falls back to the existing values for every
+   * other field, so this never touches name/slug/order.
    */
-  remove: (id) =>
+  setAvailability: (id, isAvailable) =>
     request(
-      "DELETE",
+      "PUT",
       "/categories/index.php",
-      { params: { id } }
+      {
+        params: { id },
+        body: { is_available: isAvailable ? 1 : 0 },
+      }
     ),
 
 };
@@ -2151,7 +2154,8 @@ export const categoriesApi = {
 
 /* =========================================================
    PROJECTS API
-   FULL CRUD, with image upload support
+   FULL CRUD, with image upload support, plus an availability
+   toggle (kept alongside delete, unlike categories).
 ========================================================= */
 
 export const projectsApi = {
@@ -2262,7 +2266,26 @@ export const projectsApi = {
 
 
   /*
+   * SET AVAILABILITY
+   * Available / Unavailable toggle. Sends only is_available —
+   * the backend falls back to the existing values (title,
+   * category_id, description, display_order, image) so this
+   * never needs the image or the rest of the form.
+   */
+  setAvailability: (id, isAvailable) =>
+    request(
+      "PUT",
+      "/projects/index.php",
+      {
+        params: { id },
+        body: { is_available: isAvailable ? 1 : 0 },
+      }
+    ),
+
+
+  /*
    * DELETE
+   * Kept as-is — projects can still be permanently removed.
    */
   remove: (id) =>
     request(
@@ -2272,6 +2295,7 @@ export const projectsApi = {
     ),
 
 };
+
 
 
 /* =========================================================

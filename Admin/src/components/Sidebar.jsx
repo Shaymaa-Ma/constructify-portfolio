@@ -87,7 +87,7 @@ export default function Sidebar({ open, onClose }) {
         <div className="sidebar-bottom">
 
           <a
-            href="/"
+            href="http://localhost:3000/"
             target="_blank"
             rel="noreferrer"
             className="view-site"

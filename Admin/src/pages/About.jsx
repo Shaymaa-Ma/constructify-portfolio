@@ -57,6 +57,75 @@ export default function About() {
   const [featureSaving, setFeatureSaving] = useState(null);
 
   /* =========================================================
+     FEATURE ICON OPTIONS
+     
+     Each feature gets 3 relevant icon choices.
+     The value saved to DB is still the Bootstrap icon name.
+  ========================================================= */
+
+  const featureIconOptions = {
+    "Licensed & Insured": [
+      {
+        value: "bi-shield-check",
+        label: "Shield Check",
+      },
+      {
+        value: "bi-check-circle",
+        label: "Check Circle",
+      },
+      {
+        value: "bi-shield-lock",
+        label: "Shield Lock",
+      },
+    ],
+
+    "On-Time Delivery": [
+      {
+        value: "bi-clock-history",
+        label: "Clock History",
+      },
+      {
+        value: "bi-clock",
+        label: "Clock",
+      },
+      {
+        value: "bi-calendar-check",
+        label: "Calendar Check",
+      },
+    ],
+
+    "Expert Workforce": [
+      {
+        value: "bi-people",
+        label: "People",
+      },
+      {
+        value: "bi-people-fill",
+        label: "People Fill",
+      },
+      {
+        value: "bi-person-check",
+        label: "Person Check",
+      },
+    ],
+
+    "Award Winning": [
+      {
+        value: "bi-award",
+        label: "Award",
+      },
+      {
+        value: "bi-trophy",
+        label: "Trophy",
+      },
+      {
+        value: "bi-star",
+        label: "Star",
+      },
+    ],
+  };
+
+  /* =========================================================
      LOAD ABOUT
   ========================================================= */
 
@@ -87,35 +156,16 @@ export default function About() {
 
       const response = await aboutApi.get();
 
-      /*
-       * PHP returns:
-       *
-       * {
-       *   success: true,
-       *   data: {
-       *      id,
-       *      badge_text,
-       *      title,
-       *      ...
-       *      image_primary,
-       *      image_secondary
-       *   }
-       * }
-       */
-
       const section = response?.data || {};
 
       setForm({
         id: section.id ?? null,
 
-        badge_text:
-          section.badge_text || "",
+        badge_text: section.badge_text || "",
 
-        title:
-          section.title || "",
+        title: section.title || "",
 
-        description:
-          section.description || "",
+        description: section.description || "",
 
         overlay_badge_text:
           section.overlay_badge_text || "",
@@ -161,7 +211,7 @@ export default function About() {
     } catch (err) {
       setError(
         err?.message ||
-          "Failed to load About section."
+        "Failed to load About section."
       );
     } finally {
       setLoading(false);
@@ -195,10 +245,6 @@ export default function About() {
       return;
     }
 
-    /* -------------------------------------------------------
-       Validate image type
-    ------------------------------------------------------- */
-
     if (!file.type.startsWith("image/")) {
       setError(
         "Please select a valid image file."
@@ -207,10 +253,6 @@ export default function About() {
       e.target.value = "";
       return;
     }
-
-    /* -------------------------------------------------------
-       Maximum size: 5 MB
-    ------------------------------------------------------- */
 
     const maxSize =
       5 * 1024 * 1024;
@@ -223,10 +265,6 @@ export default function About() {
       e.target.value = "";
       return;
     }
-
-    /* -------------------------------------------------------
-       Create preview
-    ------------------------------------------------------- */
 
     const previewUrl =
       URL.createObjectURL(file);
@@ -242,7 +280,6 @@ export default function About() {
       setPreviewPrimary(previewUrl);
 
     } else {
-
       if (previewSecondary) {
         URL.revokeObjectURL(
           previewSecondary
@@ -256,9 +293,6 @@ export default function About() {
     setError("");
     setSuccess("");
 
-    /*
-     * Allow selecting the same file again.
-     */
     e.target.value = "";
   }
 
@@ -314,24 +348,14 @@ export default function About() {
     setSuccess("");
 
     try {
-      /*
-       * Prepare all About fields.
-       *
-       * Images are included only when a new file
-       * was selected.
-       */
-
       const fields = {
         id: form.id ?? 1,
 
-        badge_text:
-          form.badge_text,
+        badge_text: form.badge_text,
 
-        title:
-          form.title,
+        title: form.title,
 
-        description:
-          form.description,
+        description: form.description,
 
         overlay_badge_text:
           form.overlay_badge_text,
@@ -349,45 +373,28 @@ export default function About() {
           form.secondary_btn_link,
       };
 
-      /* -----------------------------------------------------
-         PRIMARY IMAGE
-      ----------------------------------------------------- */
-
       if (newPrimary) {
         fields.image_primary =
           newPrimary;
       }
-
-      /* -----------------------------------------------------
-         SECONDARY IMAGE
-      ----------------------------------------------------- */
 
       if (newSecondary) {
         fields.image_secondary =
           newSecondary;
       }
 
-      /*
-       * Send one multipart request.
-       *
-       * This is the same approach used by Hero.
-       */
       const response =
         await aboutApi.update(fields);
 
       setSuccess(
         response?.message ||
-          (
-            newPrimary ||
+        (
+          newPrimary ||
             newSecondary
-              ? "About section and images updated successfully."
-              : "About section updated successfully."
-          )
+            ? "About section and images updated successfully."
+            : "About section updated successfully."
+        )
       );
-
-      /* -----------------------------------------------------
-         Clear temporary images
-      ----------------------------------------------------- */
 
       if (previewPrimary) {
         URL.revokeObjectURL(
@@ -407,16 +414,12 @@ export default function About() {
       setNewPrimary(null);
       setNewSecondary(null);
 
-      /* -----------------------------------------------------
-         Reload database values
-      ----------------------------------------------------- */
-
       await loadAbout();
 
     } catch (err) {
       setError(
         err?.message ||
-          "Unable to update About section."
+        "Unable to update About section."
       );
     } finally {
       setSaving(false);
@@ -437,9 +440,9 @@ export default function About() {
         (feature, i) =>
           i === index
             ? {
-                ...feature,
-                [field]: value,
-              }
+              ...feature,
+              [field]: value,
+            }
             : feature
       )
     );
@@ -487,9 +490,6 @@ export default function About() {
         "About feature updated successfully."
       );
 
-      /*
-       * Reload features from database.
-       */
       const updatedFeatures =
         await aboutApi.features.list();
 
@@ -502,7 +502,7 @@ export default function About() {
     } catch (err) {
       setError(
         err?.message ||
-          "Failed to update About feature."
+        "Failed to update About feature."
       );
     } finally {
       setFeatureSaving(null);
@@ -910,23 +910,23 @@ export default function About() {
           {(newPrimary ||
             newSecondary) && (
 
-            <div className="alert alert-info mt-3 mb-0">
+              <div className="alert alert-info mt-3 mb-0">
 
-              <small>
+                <small>
 
-                The selected image will be
-                uploaded when you click{" "}
+                  The selected image will be
+                  uploaded when you click{" "}
 
-                <strong>
-                  Save Changes
-                </strong>
-                .
+                  <strong>
+                    Save Changes
+                  </strong>
+                  .
 
-              </small>
+                </small>
 
-            </div>
+              </div>
 
-          )}
+            )}
 
         </div>
 
@@ -1251,185 +1251,304 @@ export default function About() {
         <div className="stack-list">
 
           {features.map(
-            (feature, index) => (
+            (feature, index) => {
 
-              <div
-                className="data-item"
-                key={
-                  feature.id ??
-                  `feature-${index}`
-                }
-              >
+              /*
+               * Get the 3 icons configured for
+               * this particular feature.
+               */
+              const iconOptions =
+                featureIconOptions[
+                feature.title
+                ] || [
+                  {
+                    value: "bi-star",
+                    label: "Star",
+                  },
+                  {
+                    value: "bi-check-circle",
+                    label: "Check Circle",
+                  },
+                  {
+                    value: "bi-info-circle",
+                    label: "Info Circle",
+                  },
+                ];
 
-                {/* =================================================
-                    FEATURE ICON PREVIEW
-                ================================================== */}
-
-                <div className="data-icon">
-
-                  <i
-                    className={`bi ${
-                      feature.icon ||
-                      "bi-star"
-                    }`}
-                  />
-
-                </div>
-
-
-                {/* =================================================
-                    FEATURE CONTENT
-                ================================================== */}
+              return (
 
                 <div
-                  className="data-info"
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 8,
-                    flex: 1,
-                  }}
+                  className="data-item"
+                  key={
+                    feature.id ??
+                    `feature-${index}`
+                  }
                 >
 
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 10,
-                    }}
-                  >
+                  {/* =================================================
+                      FEATURE ICON PREVIEW
+                  ================================================== */}
 
-                    {/* ICON */}
+                  <div className="data-icon">
 
-                    <input
-                      className="form-input form-control form-control-sm"
-                      style={{
-                        maxWidth: 150,
-                      }}
-                      value={
-                        feature.icon ||
-                        ""
-                      }
-                      onChange={(e) =>
-                        handleFeatureChange(
-                          index,
-                          "icon",
-                          e.target.value
-                        )
-                      }
-                      placeholder="bi-buildings"
-                    />
-
-
-                    {/* TITLE */}
-
-                    <input
-                      className="form-input form-control form-control-sm"
-                      value={
-                        feature.title ||
-                        ""
-                      }
-                      onChange={(e) =>
-                        handleFeatureChange(
-                          index,
-                          "title",
-                          e.target.value
-                        )
-                      }
-                      placeholder="Feature title"
-                    />
-
-
-                    {/* ORDER */}
-
-                    <input
-                      className="form-input form-control form-control-sm"
-                      style={{
-                        maxWidth: 80,
-                      }}
-                      type="number"
-                      min="1"
-                      value={
-                        feature.display_order ??
-                        ""
-                      }
-                      onChange={(e) =>
-                        handleFeatureChange(
-                          index,
-                          "display_order",
-                          e.target.value
-                        )
-                      }
-                      placeholder="Order"
+                    <i
+                      className={`bi ${feature.icon ||
+                        "bi-star"
+                        }`}
                     />
 
                   </div>
 
 
-                  {/* DESCRIPTION */}
+                  {/* =================================================
+                      FEATURE CONTENT
+                  ================================================== */}
 
-                  <textarea
-                    className="form-input form-control form-control-sm"
-                    value={
-                      feature.description ||
-                      ""
-                    }
-                    onChange={(e) =>
-                      handleFeatureChange(
-                        index,
-                        "description",
-                        e.target.value
-                      )
-                    }
-                    placeholder="Feature description"
-                    rows={2}
-                  />
-
-                </div>
-
-
-                {/* =================================================
-                    SAVE FEATURE
-                ================================================== */}
-
-                <div className="data-actions">
-
-                  <button
-                    className="btn-icon"
-                    type="button"
-                    disabled={
-                      featureSaving ===
-                      feature.id
-                    }
-                    onClick={() =>
-                      handleFeatureSave(
-                        feature
-                      )
-                    }
-                    title="Save feature"
+                  <div
+                    className="data-info"
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 8,
+                      flex: 1,
+                    }}
                   >
 
-                    {featureSaving ===
-                    feature.id ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 10,
+                        alignItems: "center",
+                      }}
+                    >
 
-                      <span
-                        className="spinner-border spinner-border-sm"
-                        role="status"
-                        aria-hidden="true"
-                      />
+                      {/* =================================================
+                          ICON DROPDOWN
+                      ================================================== */}
 
-                    ) : (
+                      <div
+                        style={{
+                          minWidth: 210,
+                        }}
+                      >
 
-                      <i className="bi bi-check2" />
+                        <label
+                          className="form-label mb-1"
+                          style={{
+                            fontSize: 12,
+                          }}
+                        >
+                          Icon
+                        </label>
 
-                    )}
+                        <div
+                          style={{
+                            position: "relative",
+                          }}
+                        >
+                          <select
+                            className="form-input form-control form-control-sm"
+                            style={{
+                              paddingRight: 35,
+                            }}
+                            value={
+                              feature.icon ||
+                              ""
+                            }
+                            onChange={(e) =>
+                              handleFeatureChange(
+                                index,
+                                "icon",
+                                e.target.value
+                              )
+                            }
+                          >
 
-                  </button>
+                            <option value="" disabled>
+                              Select an icon
+                            </option>
+
+                            {iconOptions.map(
+                              (option) => (
+
+                                <option
+                                  key={option.value}
+                                  value={option.value}
+                                >
+                                  {option.label}
+                                </option>
+
+                              )
+                            )}
+
+                          </select>
+
+                          {/* DROPDOWN ARROW */}
+                          <i
+                            className="bi bi-chevron-down"
+                            style={{
+                              position: "absolute",
+                              right: 12,
+                              top: "50%",
+                              transform: "translateY(-50%)",
+                              pointerEvents: "none",
+                              fontSize: 12,
+                            }}
+                          />
+
+                        </div>
+
+                      </div>
+
+
+                      {/* =================================================
+                          TITLE
+                      ================================================== */}
+
+                      <div
+                        style={{
+                          flex: 1,
+                        }}
+                      >
+
+                        <label
+                          className="form-label mb-1"
+                          style={{
+                            fontSize: 12,
+                          }}
+                        >
+                          Title
+                        </label>
+
+                        <input
+                          className="form-input form-control form-control-sm"
+                          value={
+                            feature.title ||
+                            ""
+                          }
+                          onChange={(e) =>
+                            handleFeatureChange(
+                              index,
+                              "title",
+                              e.target.value
+                            )
+                          }
+                          placeholder="Feature title"
+                        />
+
+                      </div>
+
+
+                      {/* =================================================
+                          ORDER
+                      ================================================== */}
+
+                      <div
+                        style={{
+                          maxWidth: 80,
+                        }}
+                      >
+
+                        <label
+                          className="form-label mb-1"
+                          style={{
+                            fontSize: 12,
+                          }}
+                        >
+                          Order
+                        </label>
+
+                        <input
+                          className="form-input form-control form-control-sm"
+                          type="number"
+                          min="1"
+                          value={
+                            feature.display_order ??
+                            ""
+                          }
+                          onChange={(e) =>
+                            handleFeatureChange(
+                              index,
+                              "display_order",
+                              e.target.value
+                            )
+                          }
+                          placeholder="Order"
+                        />
+
+                      </div>
+
+                    </div>
+
+
+                    {/* =================================================
+                        DESCRIPTION
+                    ================================================== */}
+
+                    <textarea
+                      className="form-input form-control form-control-sm"
+                      value={
+                        feature.description ||
+                        ""
+                      }
+                      onChange={(e) =>
+                        handleFeatureChange(
+                          index,
+                          "description",
+                          e.target.value
+                        )
+                      }
+                      placeholder="Feature description"
+                      rows={2}
+                    />
+
+                  </div>
+
+
+                  {/* =================================================
+                      SAVE FEATURE
+                  ================================================== */}
+
+                  <div className="data-actions">
+
+                    <button
+                      className="btn-icon"
+                      type="button"
+                      disabled={
+                        featureSaving ===
+                        feature.id
+                      }
+                      onClick={() =>
+                        handleFeatureSave(
+                          feature
+                        )
+                      }
+                      title="Save feature"
+                    >
+
+                      {featureSaving ===
+                        feature.id ? (
+
+                        <span
+                          className="spinner-border spinner-border-sm"
+                          role="status"
+                          aria-hidden="true"
+                        />
+
+                      ) : (
+
+                        <i className="bi bi-check2" />
+
+                      )}
+
+                    </button>
+
+                  </div>
 
                 </div>
 
-              </div>
-
-            )
+              );
+            }
           )}
 
 

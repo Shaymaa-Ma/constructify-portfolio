@@ -36,29 +36,57 @@ Main Sections:
 
 ## Screenshots
 
-| Home | About |
-|---|---|
-| ![Home](screenshots/home.png) | ![About](screenshots/about.png) |
+### Home
+![Home](screenshots/home.png)
 
-| Services | Services |
-|---|---|
-| ![Services](screenshots/services1.png) | ![Services](screenshots/services2.png) |
+### About
+![About](screenshots/about.png)
 
-| Projects | Projects |
-|---|---|
-| ![Projects](screenshots/projects.png) | ![Projects](screenshots/projects2.png) |
+### Services
+![Services](screenshots/services1.png)
 
-| Admin Dashboard | Admin Hero |
-|---|---|
-| ![Admin Dashboard](screenshots/admin-dashboard.png) | ![Admin Hero](screenshots/admin-hero.png) |
+![Services](screenshots/services2.png)
 
-| Admin About | Admin Services |
-|---|---|
-| ![Admin About](screenshots/admin-about.png) | ![Admin Services](screenshots/admin-services.png) |
+### Projects
+![Projects](screenshots/projects1.png)
 
-| Admin Projects | Admin Categories |
-|---|---|
-| ![Admin Projects](screenshots/admin-projects.png) | ![Admin Categories](screenshots/admin-categories.png) |
+![Projects](screenshots/projects2.png)
+
+### Admin Dashboard
+![Admin Dashboard](screenshots/admin-dashboard.png)
+
+### Admin Hero
+![Admin Hero](screenshots/admin-hero-1.png)
+
+![Admin Hero](screenshots/admin-hero-2.png)
+
+### Admin About
+![Admin About](screenshots/admin-about-1.png)
+
+![Admin About](screenshots/admin-about-2.png)
+
+![Admin About](screenshots/admin-about-3.png)
+
+### Admin Services
+![Admin Services](screenshots/admin-services-1.png)
+
+![Admin Services](screenshots/admin-services-2.png)
+
+![Admin Services](screenshots/admin-services-3.png)
+
+![Admin Services](screenshots/admin-services-4.png)
+
+### Admin Projects
+![Admin Projects](screenshots/admin-projects-1.png)
+
+![Admin Projects](screenshots/admin-projects-2.png)
+
+![Admin Projects](screenshots/admin-projects-3.png)
+
+![Admin Projects](screenshots/admin-projects-4.png)
+
+### Admin Site Settings
+![Admin Site Settings](screenshots/admin-site-settings.png)
 
 ## Getting it running
 

@@ -40,6 +40,9 @@ export default function Projects() {
   const [deleteProjectTarget, setDeleteProjectTarget] = useState(null);
   const [deletingProject, setDeletingProject] = useState(false);
 
+  // Availability toggle in progress for a given project id.
+  const [togglingProjectId, setTogglingProjectId] = useState(null);
+
   /* =========================================================
      CATEGORY FORM
   ========================================================= */
@@ -48,8 +51,8 @@ export default function Projects() {
   const [categoryForm, setCategoryForm] = useState(emptyCategoryForm);
   const [categorySaving, setCategorySaving] = useState(false);
 
-  const [deleteCategoryTarget, setDeleteCategoryTarget] = useState(null);
-  const [deletingCategory, setDeletingCategory] = useState(false);
+  // Availability toggle in progress for a given category id.
+  const [togglingCategoryId, setTogglingCategoryId] = useState(null);
 
   useEffect(() => {
     load();
@@ -82,6 +85,12 @@ export default function Projects() {
     setTab(next);
     setError('');
     setSuccess('');
+  }
+
+  // is_available comes back from PHP as 1 / 0 (or possibly a
+  // string "1"/"0" depending on the driver) — normalize to bool.
+  function isAvailable(record) {
+    return Number(record?.is_available) !== 0;
   }
 
   /* =========================================================
@@ -210,6 +219,28 @@ export default function Projects() {
     }
   }
 
+  async function toggleProjectAvailability(project) {
+    setError('');
+    setSuccess('');
+    setTogglingProjectId(project.id);
+
+    const makingAvailable = !isAvailable(project);
+
+    try {
+      await projectsApi.setAvailability(project.id, makingAvailable);
+      setSuccess(
+        makingAvailable
+          ? 'Project marked available.'
+          : 'Project marked unavailable.'
+      );
+      await load();
+    } catch (err) {
+      setError(err.message || 'Failed to update project availability.');
+    } finally {
+      setTogglingProjectId(null);
+    }
+  }
+
   /* =========================================================
      CATEGORIES
   ========================================================= */
@@ -274,24 +305,25 @@ export default function Projects() {
     }
   }
 
-  async function confirmDeleteCategory() {
-    if (!deleteCategoryTarget) return;
-
-    setDeletingCategory(true);
+  async function toggleCategoryAvailability(category) {
     setError('');
     setSuccess('');
+    setTogglingCategoryId(category.id);
+
+    const makingAvailable = !isAvailable(category);
 
     try {
-      await categoriesApi.remove(deleteCategoryTarget.id);
-      setSuccess('Category deleted successfully.');
-      setDeleteCategoryTarget(null);
+      await categoriesApi.setAvailability(category.id, makingAvailable);
+      setSuccess(
+        makingAvailable
+          ? 'Category marked available.'
+          : 'Category marked unavailable.'
+      );
       await load();
     } catch (err) {
-      // e.g. still has projects assigned — surfaced by the API's 409
-      setError(err.message || 'Failed to delete category.');
-      setDeleteCategoryTarget(null);
+      setError(err.message || 'Failed to update category availability.');
     } finally {
-      setDeletingCategory(false);
+      setTogglingCategoryId(null);
     }
   }
 
@@ -359,53 +391,78 @@ export default function Projects() {
       {tab === 'projects' && (
         <>
           <div className="projects-admin-grid">
-            {projects.map((project) => (
-              <div className="project-admin-card" key={project.id}>
-                <div className="project-admin-image">
-                  {project.image ? (
-                    <img src={getImageUrl(project.image)} alt={project.title} />
-                  ) : (
-                    <i className="bi bi-image" />
-                  )}
-                </div>
+            {projects.map((project) => {
+              const available = isAvailable(project);
+              const toggling = togglingProjectId === project.id;
 
-                <div className="project-admin-body">
-                  <span className="project-badge">
-                    {project.category_name || 'Uncategorized'}
-                  </span>
+              return (
+                <div
+                  className="project-admin-card"
+                  key={project.id}
+                  style={!available ? { opacity: 0.6 } : undefined}
+                >
+                  <div className="project-admin-image">
+                    {project.image ? (
+                      <img src={getImageUrl(project.image)} alt={project.title} />
+                    ) : (
+                      <i className="bi bi-image" />
+                    )}
+                  </div>
 
-                  <h3>{project.title}</h3>
-                  <p>{project.description || 'No description'}</p>
-
-                  <div className="project-meta">
-                    <span>
-                      <i className="bi bi-sort-numeric-down me-1" />
-                      Order {project.display_order ?? 0}
+                  <div className="project-admin-body">
+                    <span className="project-badge">
+                      {project.category_name || 'Uncategorized'}
                     </span>
-                  </div>
 
-                  <div className="project-card-actions">
-                    <button
-                      type="button"
-                      className="btn-icon"
-                      onClick={() => openEditModal(project)}
-                      title="Edit"
-                    >
-                      <i className="bi bi-pencil" />
-                    </button>
+                    {!available && (
+                      <span className="project-badge" style={{ background: 'var(--danger)', marginLeft: 6 }}>
+                        Unavailable
+                      </span>
+                    )}
 
-                    <button
-                      type="button"
-                      className="btn-icon btn-danger"
-                      onClick={() => setDeleteProjectTarget(project)}
-                      title="Delete"
-                    >
-                      <i className="bi bi-trash" />
-                    </button>
+                    <h3>{project.title}</h3>
+                    <p>{project.description || 'No description'}</p>
+
+                    <div className="project-meta">
+                      <span>
+                        <i className="bi bi-sort-numeric-down me-1" />
+                        Order {project.display_order ?? 0}
+                      </span>
+                    </div>
+
+                    <div className="project-card-actions">
+                      <button
+                        type="button"
+                        className="btn-icon"
+                        onClick={() => openEditModal(project)}
+                        title="Edit"
+                      >
+                        <i className="bi bi-pencil" />
+                      </button>
+
+                      <button
+                        type="button"
+                        className={`btn-icon ${available ? '' : 'btn-danger'}`}
+                        onClick={() => toggleProjectAvailability(project)}
+                        disabled={toggling}
+                        title={available ? 'Mark unavailable' : 'Mark available'}
+                      >
+                        <i className={`bi ${available ? 'bi-eye' : 'bi-eye-slash'}`} />
+                      </button>
+
+                      <button
+                        type="button"
+                        className="btn-icon btn-danger"
+                        onClick={() => setDeleteProjectTarget(project)}
+                        title="Delete"
+                      >
+                        <i className="bi bi-trash" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {projects.length === 0 && (
               <div className="empty-state">No projects yet.</div>
@@ -635,77 +692,55 @@ export default function Projects() {
             </div>
 
             <div className="stack-list">
-              {categories.map((category, index) => (
-                <div className="data-item" key={category.id}>
-                  <div className="category-number">{index + 1}</div>
+              {categories.map((category, index) => {
+                const available = isAvailable(category);
+                const toggling = togglingCategoryId === category.id;
 
-                  <div className="data-info">
-                    <strong>{category.name}</strong>
-                    <span>
-                      /{category.slug} · order {category.display_order ?? 0}
-                    </span>
+                return (
+                  <div
+                    className="data-item"
+                    key={category.id}
+                    style={!available ? { opacity: 0.6 } : undefined}
+                  >
+                    <div className="category-number">{index + 1}</div>
+
+                    <div className="data-info">
+                      <strong>{category.name}</strong>
+                      <span>
+                        /{category.slug} · order {category.display_order ?? 0}
+                        {!available && ' · Unavailable'}
+                      </span>
+                    </div>
+
+                    <div className="data-actions">
+                      <button
+                        type="button"
+                        className="btn-icon"
+                        onClick={() => startEditCategory(category)}
+                        title="Edit"
+                      >
+                        <i className="bi bi-pencil" />
+                      </button>
+
+                      <button
+                        type="button"
+                        className={`btn-icon ${available ? '' : 'btn-danger'}`}
+                        onClick={() => toggleCategoryAvailability(category)}
+                        disabled={toggling}
+                        title={available ? 'Mark unavailable' : 'Mark available'}
+                      >
+                        <i className={`bi ${available ? 'bi-eye' : 'bi-eye-slash'}`} />
+                      </button>
+                    </div>
                   </div>
-
-                  <div className="data-actions">
-                    <button
-                      type="button"
-                      className="btn-icon"
-                      onClick={() => startEditCategory(category)}
-                      title="Edit"
-                    >
-                      <i className="bi bi-pencil" />
-                    </button>
-
-                    <button
-                      type="button"
-                      className="btn-icon btn-danger"
-                      onClick={() => setDeleteCategoryTarget(category)}
-                      title="Delete"
-                    >
-                      <i className="bi bi-trash" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
 
               {categories.length === 0 && (
                 <div className="empty-state">No categories yet.</div>
               )}
             </div>
           </div>
-
-          {deleteCategoryTarget && (
-            <div className="modal-backdrop-custom" onClick={() => setDeleteCategoryTarget(null)}>
-              <div className="confirm-modal" onClick={(e) => e.stopPropagation()}>
-                <div className="confirm-icon">
-                  <i className="bi bi-exclamation-triangle" />
-                </div>
-
-                <h3>Delete "{deleteCategoryTarget.name}"?</h3>
-                <p>Categories that still have projects assigned to them can't be deleted.</p>
-
-                <div className="form-actions-modern">
-                  <button
-                    className="admin-btn btn"
-                    style={{ background: 'var(--danger)' }}
-                    onClick={confirmDeleteCategory}
-                    disabled={deletingCategory}
-                  >
-                    {deletingCategory ? 'Deleting…' : 'Delete Category'}
-                  </button>
-
-                  <button
-                    className="btn-icon"
-                    onClick={() => setDeleteCategoryTarget(null)}
-                    disabled={deletingCategory}
-                    style={{ width: 'auto', padding: '0 16px' }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
     </>

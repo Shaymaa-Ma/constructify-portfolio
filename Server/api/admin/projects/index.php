@@ -270,6 +270,10 @@ function delete_project_image(?string $image): void
 | GET /projects/
 | GET /projects/?id=1
 |
+| Returns ALL projects (available + unavailable) so the admin
+| panel can list and toggle both states. The client site's own
+| endpoint is responsible for filtering is_available = 1.
+|
 */
 
 if ($method === 'GET') {
@@ -440,6 +444,11 @@ if ($method === 'POST') {
     $display_order =
         (int)($input['display_order'] ?? 0);
 
+    $is_available =
+        array_key_exists('is_available', $input)
+            ? (int)(bool)$input['is_available']
+            : 1;
+
 
     /*
      * Validate category
@@ -562,9 +571,10 @@ if ($method === 'POST') {
             title,
             description,
             image,
-            display_order
+            display_order,
+            is_available
         )
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?)
     ");
 
 
@@ -587,12 +597,13 @@ if ($method === 'POST') {
 
 
     $stmt->bind_param(
-        "isssi",
+        "isssii",
         $category_id,
         $title,
         $description,
         $image,
-        $display_order
+        $display_order,
+        $is_available
     );
 
 
@@ -644,6 +655,11 @@ if ($method === 'POST') {
 |
 | POST
 | _method=PUT
+|
+| All fields fall back to their existing value when omitted —
+| this is what lets the Available / Unavailable toggle send just
+| { id, is_available } without resending the whole form, same
+| pattern as the categories endpoint.
 |
 */
 
@@ -737,19 +753,33 @@ if (
 
 
     /*
-     * Fields
+     * Fields — fall back to existing values when omitted so a
+     * partial payload (e.g. just toggling availability) works.
      */
     $category_id =
-        (int)($input['category_id'] ?? 0);
+        array_key_exists('category_id', $input) && (int)$input['category_id'] > 0
+            ? (int)$input['category_id']
+            : (int)$existingProject['category_id'];
 
     $title =
-        trim($input['title'] ?? '');
+        array_key_exists('title', $input) && trim((string)$input['title']) !== ''
+            ? trim((string)$input['title'])
+            : $existingProject['title'];
 
     $description =
-        trim($input['description'] ?? '');
+        array_key_exists('description', $input)
+            ? trim((string)$input['description'])
+            : $existingProject['description'];
 
     $display_order =
-        (int)($input['display_order'] ?? 0);
+        array_key_exists('display_order', $input)
+            ? (int)$input['display_order']
+            : (int)$existingProject['display_order'];
+
+    $is_available =
+        array_key_exists('is_available', $input)
+            ? (int)(bool)$input['is_available']
+            : (int)$existingProject['is_available'];
 
 
     /*
@@ -896,7 +926,8 @@ if (
             title = ?,
             description = ?,
             image = ?,
-            display_order = ?
+            display_order = ?,
+            is_available = ?
         WHERE id = ?
     ");
 
@@ -920,12 +951,13 @@ if (
 
 
     $stmt->bind_param(
-        "isssii",
+        "isssiii",
         $category_id,
         $title,
         $description,
         $image,
         $display_order,
+        $is_available,
         $id
     );
 
@@ -983,6 +1015,10 @@ if (
 |--------------------------------------------------------------------------
 | DELETE PROJECT
 |--------------------------------------------------------------------------
+|
+| Kept as-is — projects can still be permanently deleted, unlike
+| categories which are only hidden via is_available.
+|
 */
 
 if ($method === 'DELETE') {

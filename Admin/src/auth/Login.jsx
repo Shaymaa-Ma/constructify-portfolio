@@ -1,8 +1,6 @@
+
 import React, { useState } from "react";
-import {
-  Link,
-  useNavigate,
-} from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import {
   authApi,
@@ -17,11 +15,9 @@ export default function Login() {
     password: "",
   });
 
-  const [loading, setLoading] =
-    useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const [error, setError] =
-    useState("");
+  const [error, setError] = useState("");
 
   const handleChange = (e) => {
     setForm({
@@ -37,8 +33,7 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const response =
-        await authApi.login(form);
+      const response = await authApi.login(form);
 
       if (response?.token) {
         setToken(response.token);
@@ -69,8 +64,8 @@ export default function Login() {
 
         <div className="auth-brand">
 
-          <div className="brand-mark">
-            C
+          <div className="brand-mark small">
+            <i className="bi bi-buildings-fill"></i>
           </div>
 
           <div>
@@ -139,6 +134,7 @@ export default function Login() {
           </div>
 
           <button
+            type="submit"
             className="btn admin-btn w-100"
             disabled={loading}
           >
@@ -153,13 +149,6 @@ export default function Login() {
           </button>
 
         </form>
-
-        <p className="auth-footer">
-          Need an account?{" "}
-          <Link to="/admin/register">
-            Create one
-          </Link>
-        </p>
 
       </div>
 

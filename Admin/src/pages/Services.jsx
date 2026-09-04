@@ -60,6 +60,102 @@ export default function Services() {
   const [serviceSaving, setServiceSaving] = useState(null);
 
   /* =========================================================
+     SERVICE ICON OPTIONS
+
+     The value saved to the database is still the Bootstrap
+     icon class. The admin selects a friendly icon name.
+  ========================================================= */
+
+  const serviceIconOptions = {
+    1: [
+      {
+        value: "bi-house",
+        label: "House",
+      },
+      {
+        value: "bi-house-check",
+        label: "House Check",
+      },
+      {
+        value: "bi-buildings",
+        label: "Buildings",
+      },
+    ],
+
+    2: [
+      {
+        value: "bi-building",
+        label: "Building",
+      },
+      {
+        value: "bi-buildings",
+        label: "Buildings",
+      },
+      {
+        value: "bi-building-check",
+        label: "Building Check",
+      },
+    ],
+
+    3: [
+      {
+        value: "bi-hammer",
+        label: "Hammer",
+      },
+      {
+        value: "bi-tools",
+        label: "Tools",
+      },
+      {
+        value: "bi-house-gear",
+        label: "House Gear",
+      },
+    ],
+
+    4: [
+      {
+        value: "bi-signpost-split",
+        label: "Signpost",
+      },
+      {
+        value: "bi-cone-striped",
+        label: "Construction",
+      },
+      {
+        value: "bi-diagram-3",
+        label: "Infrastructure",
+      },
+    ],
+  };
+
+  /* =========================================================
+     COUNTER ICON OPTIONS
+  ========================================================= */
+
+  const counterIconOptions = [
+    {
+      value: "bi-award",
+      label: "Award",
+    },
+    {
+      value: "bi-building",
+      label: "Building",
+    },
+    {
+      value: "bi-people",
+      label: "People",
+    },
+    {
+      value: "bi-trophy",
+      label: "Trophy",
+    },
+    {
+      value: "bi-bar-chart",
+      label: "Bar Chart",
+    },
+  ];
+
+  /* =========================================================
      LOAD ON MOUNT
   ========================================================= */
 
@@ -694,16 +790,63 @@ export default function Services() {
                     <div className="row g-3">
 
                       <div className="col-md-3">
-                        <label className="form-label">Icon</label>
-                        <input
-                          type="text"
-                          className="form-input form-control"
-                          value={counter.icon || ""}
-                          onChange={(e) =>
-                            handleCounterChange(index, "icon", e.target.value)
-                          }
-                          placeholder="bi-bar-chart"
-                        />
+                        <label className="form-label">
+                          Icon
+                        </label>
+
+                        <div style={{ position: "relative" }}>
+
+                          <select
+                            className="form-input form-control"
+                            style={{
+                              paddingRight: 35,
+                            }}
+                            value={counter.icon || ""}
+                            onChange={(e) =>
+                              handleCounterChange(
+                                index,
+                                "icon",
+                                e.target.value
+                              )
+                            }
+                          >
+
+                            <option
+                              value=""
+                              disabled
+                            >
+                              Select an icon
+                            </option>
+
+                            {counterIconOptions.map(
+                              (option) => (
+
+                                <option
+                                  key={option.value}
+                                  value={option.value}
+                                >
+                                  {option.label}
+                                </option>
+
+                              )
+                            )}
+
+                          </select>
+
+                          <i
+                            className="bi bi-chevron-down"
+                            style={{
+                              position: "absolute",
+                              right: 12,
+                              top: "50%",
+                              transform:
+                                "translateY(-50%)",
+                              pointerEvents: "none",
+                              fontSize: 12,
+                            }}
+                          />
+
+                        </div>
                       </div>
 
                       <div className="col-md-3">
@@ -805,100 +948,215 @@ export default function Services() {
 
         <div className="stack-list">
 
-          {services.map((service, index) => (
+          {services.map((service, index) => {
 
-            <div className="data-item" key={service.id ?? `service-${index}`}>
+            const iconOptions =
+              serviceIconOptions[service.id] || [
+                {
+                  value: "bi-house",
+                  label: "House",
+                },
+                {
+                  value: "bi-building",
+                  label: "Building",
+                },
+                {
+                  value: "bi-tools",
+                  label: "Tools",
+                },
+              ];
 
-              <div className="data-icon">
-                <i className={`bi ${service.icon || "bi-tools"}`} />
-              </div>
+            return (
 
               <div
-                className="data-info"
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                  flex: 1,
-                }}
+                className="data-item"
+                key={service.id ?? `service-${index}`}
               >
 
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-
-                  <input
-                    type="text"
-                    className="form-input form-control form-control-sm"
-                    style={{ maxWidth: 180 }}
-                    value={service.icon || ""}
-                    onChange={(e) =>
-                      handleServiceChange(index, "icon", e.target.value)
-                    }
-                    placeholder="bi-tools"
+                <div className="data-icon">
+                  <i
+                    className={`bi ${
+                      service.icon || "bi-tools"
+                    }`}
                   />
+                </div>
 
-                  <input
-                    type="text"
+                <div
+                  className="data-info"
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                    flex: 1,
+                  }}
+                >
+
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 10,
+                      flexWrap: "wrap",
+                    }}
+                  >
+
+                    {/* =================================================
+                        SERVICE ICON DROPDOWN
+                    ================================================== */}
+
+                    <div
+                      style={{
+                        position: "relative",
+                        width: 180,
+                      }}
+                    >
+
+                      <select
+                        className="form-input form-control form-control-sm"
+                        style={{
+                          width: "100%",
+                          paddingRight: 32,
+                        }}
+                        value={service.icon || ""}
+                        onChange={(e) =>
+                          handleServiceChange(
+                            index,
+                            "icon",
+                            e.target.value
+                          )
+                        }
+                      >
+
+                        <option
+                          value=""
+                          disabled
+                        >
+                          Select an icon
+                        </option>
+
+                        {iconOptions.map(
+                          (option) => (
+
+                            <option
+                              key={option.value}
+                              value={option.value}
+                            >
+                              {option.label}
+                            </option>
+
+                          )
+                        )}
+
+                      </select>
+
+                      <i
+                        className="bi bi-chevron-down"
+                        style={{
+                          position: "absolute",
+                          right: 10,
+                          top: "50%",
+                          transform:
+                            "translateY(-50%)",
+                          pointerEvents: "none",
+                          fontSize: 11,
+                        }}
+                      />
+
+                    </div>
+
+                    <input
+                      type="text"
+                      className="form-input form-control form-control-sm"
+                      style={{
+                        flex: 1,
+                        minWidth: 180,
+                      }}
+                      value={service.title || ""}
+                      onChange={(e) =>
+                        handleServiceChange(
+                          index,
+                          "title",
+                          e.target.value
+                        )
+                      }
+                      placeholder="Service title"
+                    />
+
+                    <input
+                      type="number"
+                      className="form-input form-control form-control-sm"
+                      style={{
+                        maxWidth: 100,
+                      }}
+                      value={
+                        service.display_order ?? ""
+                      }
+                      onChange={(e) =>
+                        handleServiceChange(
+                          index,
+                          "display_order",
+                          e.target.value
+                        )
+                      }
+                      placeholder="Order"
+                    />
+
+                  </div>
+
+                  <textarea
                     className="form-input form-control form-control-sm"
-                    style={{ flex: 1, minWidth: 180 }}
-                    value={service.title || ""}
-                    onChange={(e) =>
-                      handleServiceChange(index, "title", e.target.value)
+                    value={
+                      service.description || ""
                     }
-                    placeholder="Service title"
-                  />
-
-                  <input
-                    type="number"
-                    className="form-input form-control form-control-sm"
-                    style={{ maxWidth: 100 }}
-                    value={service.display_order ?? ""}
                     onChange={(e) =>
                       handleServiceChange(
                         index,
-                        "display_order",
+                        "description",
                         e.target.value
                       )
                     }
-                    placeholder="Order"
+                    placeholder="Service description"
+                    rows={3}
                   />
 
                 </div>
 
-                <textarea
-                  className="form-input form-control form-control-sm"
-                  value={service.description || ""}
-                  onChange={(e) =>
-                    handleServiceChange(index, "description", e.target.value)
-                  }
-                  placeholder="Service description"
-                  rows={3}
-                />
+                <div className="data-actions">
+
+                  <button
+                    className="btn-icon"
+                    type="button"
+                    disabled={
+                      serviceSaving === service.id
+                    }
+                    onClick={() =>
+                      handleServiceSave(service)
+                    }
+                    title="Save service"
+                  >
+
+                    {serviceSaving === service.id ? (
+
+                      <span
+                        className="spinner-border spinner-border-sm"
+                        role="status"
+                        aria-hidden="true"
+                      />
+
+                    ) : (
+
+                      <i className="bi bi-check2" />
+
+                    )}
+
+                  </button>
+
+                </div>
 
               </div>
 
-              <div className="data-actions">
-                <button
-                  className="btn-icon"
-                  type="button"
-                  disabled={serviceSaving === service.id}
-                  onClick={() => handleServiceSave(service)}
-                  title="Save service"
-                >
-                  {serviceSaving === service.id ? (
-                    <span
-                      className="spinner-border spinner-border-sm"
-                      role="status"
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <i className="bi bi-check2" />
-                  )}
-                </button>
-              </div>
+            );
 
-            </div>
-
-          ))}
+          })}
 
           {services.length === 0 && (
             <div className="empty-state">

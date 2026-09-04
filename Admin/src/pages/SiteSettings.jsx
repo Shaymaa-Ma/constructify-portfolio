@@ -22,6 +22,46 @@ const emptySettings = {
 };
 
 
+/* =========================================================
+   LOGO ICON OPTIONS
+========================================================= */
+
+const logoIconOptions = [
+  {
+    value: "bi-buildings",
+    label: "Buildings",
+  },
+  {
+    value: "bi-building",
+    label: "Building",
+  },
+  {
+    value: "bi-house",
+    label: "House",
+  },
+  {
+    value: "bi-house-check",
+    label: "House Check",
+  },
+  {
+    value: "bi-shield-check",
+    label: "Shield Check",
+  },
+  {
+    value: "bi-award",
+    label: "Award",
+  },
+  {
+    value: "bi-trophy",
+    label: "Trophy",
+  },
+  {
+    value: "bi-star",
+    label: "Star",
+  },
+];
+
+
 export default function SiteSettings() {
 
   const [
@@ -490,26 +530,70 @@ export default function SiteSettings() {
               Logo Icon
             </label>
 
-            <input
-              id="logo_icon"
-              name="logo_icon"
-              type="text"
-              className="
-                form-input
-                form-control
-              "
-              value={
-                form.logo_icon
-              }
-              onChange={
-                handleChange
-              }
-              placeholder="bi-buildings"
-            />
+            <div
+              style={{
+                position: "relative",
+              }}
+            >
+
+              <select
+                id="logo_icon"
+                name="logo_icon"
+                className="
+                  form-input
+                  form-control
+                "
+                style={{
+                  paddingRight: 35,
+                }}
+                value={
+                  form.logo_icon
+                }
+                onChange={
+                  handleChange
+                }
+              >
+
+                <option
+                  value=""
+                  disabled
+                >
+                  Select a logo icon
+                </option>
+
+                {logoIconOptions.map(
+                  (option) => (
+
+                    <option
+                      key={option.value}
+                      value={option.value}
+                    >
+                      {option.label}
+                    </option>
+
+                  )
+                )}
+
+              </select>
+
+              <i
+                className="bi bi-chevron-down"
+                style={{
+                  position: "absolute",
+                  right: 12,
+                  top: "50%",
+                  transform:
+                    "translateY(-50%)",
+                  pointerEvents: "none",
+                  fontSize: 12,
+                }}
+              />
+
+            </div>
 
             <small className="text-muted d-block mt-1">
 
-              Enter the Bootstrap Icons class
+              Select the Bootstrap icon
               used for the company logo.
 
             </small>

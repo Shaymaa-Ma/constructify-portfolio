@@ -13,7 +13,14 @@ html::-webkit-scrollbar {
   height: 0;
 }
 
-.container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+/*
+  CONTAINER
+  Widened from a hard 1200px cap to a fluid max-width so content
+  fills wide screens instead of leaving big empty side margins.
+  min(94%, 1400px) means: use 94% of the viewport width, but never
+  exceed 1400px on very large monitors.
+*/
+.container { max-width: 1400px; width: min(94%, 1400px); margin: 0 auto; padding: 0 24px; }
 .text-center { text-align: center; }
 .text-accent { color: var(--accent); }
 
@@ -87,7 +94,8 @@ html::-webkit-scrollbar {
 }
 
 .navbar-inner {
-  max-width: 1200px;
+  max-width: 1400px;
+  width: min(94%, 1400px);
   margin: 0 auto;
   padding: 0 24px;
   display: flex;
@@ -305,8 +313,8 @@ html::-webkit-scrollbar {
   position: relative;
   z-index: 2;
 
-  max-width: 1200px;
-  width: 100%;
+  max-width: 1400px;
+  width: min(94%, 1400px);
 
   margin: 0 auto;
 
@@ -378,7 +386,7 @@ html::-webkit-scrollbar {
   text-align: center;
 
   width: calc(100% - 48px);
-  max-width: 1200px;
+  max-width: 1400px;
 
   padding: 30px 0;
 
